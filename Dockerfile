@@ -9,13 +9,12 @@ RUN npm run build
 # Production stage
 FROM node:20-alpine
 WORKDIR /app
-RUN npm install -g serve
 COPY --from=builder /app/dist ./dist
+COPY server.js ./
 
-# Cloud Run injects the PORT environment variable (default 8080)
+# Cloud Run injects the PORT environment variable
 ENV PORT=8080
-EXPOSE 8080
+EXPOSE ${PORT}
 
-# -s forces Single-Page Application mode (routing all traffic to index.html)
-# -l explicitly binds to the injected Cloud Run port
-CMD serve -s dist -l $PORT
+# Run the native server directly 
+CMD ["node", "server.js"]
