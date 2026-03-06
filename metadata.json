@@ -1,0 +1,5 @@
+{
+  "name": "Repair Shop CRM & Ticketing",
+  "description": "An application for electronics repair companies to manage customer information and create printable repair tickets to track devices.",
+  "requestFramePermissions": []
+}

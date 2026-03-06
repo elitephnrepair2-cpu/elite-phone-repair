@@ -1,0 +1,220 @@
+Brand,DeviceCategory,Model
+Apple,Phone,iPhone 17 Pro Max
+Apple,Phone,iPhone 17 Pro
+Apple,Phone,iPhone 17 Plus
+Apple,Phone,iPhone 17
+Apple,Phone,iPhone 17 Air
+Apple,Phone,iPhone 17E
+Apple,Phone,iPhone 16 Pro Max
+Apple,Phone,iPhone 16 Pro
+Apple,Phone,iPhone 16 Plus
+Apple,Phone,iPhone 16
+Apple,Phone,iPhone 15 Pro Max
+Apple,Phone,iPhone 15 Pro
+Apple,Phone,iPhone 15 Plus
+Apple,Phone,iPhone 15
+Apple,Phone,iPhone 14 Pro Max
+Apple,Phone,iPhone 14 Pro
+Apple,Phone,iPhone 14 Plus
+Apple,Phone,iPhone 14
+Apple,Phone,iPhone 13 Pro Max
+Apple,Phone,iPhone 13 Pro
+Apple,Phone,iPhone 13
+Apple,Phone,iPhone 13 mini
+Apple,Phone,iPhone 12 Pro Max
+Apple,Phone,iPhone 12 Pro
+Apple,Phone,iPhone 12
+Apple,Phone,iPhone 12 mini
+Apple,Phone,iPhone 11 Pro Max
+Apple,Phone,iPhone 11 Pro
+Apple,Phone,iPhone 11
+Apple,Phone,iPhone XS Max
+Apple,Phone,iPhone XS
+Apple,Phone,iPhone XR
+Apple,Phone,iPhone X
+Apple,Phone,iPhone 8 Plus
+Apple,Phone,iPhone 8
+Apple,Phone,iPhone 7 Plus
+Apple,Phone,iPhone 7
+Apple,Phone,iPhone 6s Plus
+Apple,Phone,iPhone 6s
+Apple,Phone,iPhone 6 Plus
+Apple,Phone,iPhone 6
+Apple,Phone,iPhone SE (3rd Gen)
+Apple,Phone,iPhone SE (2nd Gen)
+Apple,Phone,iPhone SE (1st Gen)
+Apple,Tablet,iPad Pro 12.9"
+Apple,Tablet,iPad Pro 11"
+Apple,Tablet,iPad Air
+Apple,Tablet,iPad mini
+Apple,Tablet,iPad (Standard)
+Apple,Laptop,MacBook Pro
+Apple,Laptop,MacBook Air
+Apple,Laptop,iMac
+Samsung,Phone,Galaxy S25 Ultra
+Samsung,Phone,Galaxy S25+
+Samsung,Phone,Galaxy S25
+Samsung,Phone,Galaxy S24 Ultra
+Samsung,Phone,Galaxy S24+
+Samsung,Phone,Galaxy S24
+Samsung,Phone,Galaxy S23 Ultra
+Samsung,Phone,Galaxy S23+
+Samsung,Phone,Galaxy S23
+Samsung,Phone,Galaxy S22 Ultra
+Samsung,Phone,Galaxy S22+
+Samsung,Phone,Galaxy S22
+Samsung,Phone,Galaxy Z Fold 6
+Samsung,Phone,Galaxy Z Fold 5
+Samsung,Phone,Galaxy Z Fold 4
+Samsung,Phone,Galaxy Z Flip 6
+Samsung,Phone,Galaxy Z Flip 5
+Samsung,Phone,Galaxy Z Flip 4
+Samsung,Phone,Galaxy S21 Ultra
+Samsung,Phone,Galaxy S21+
+Samsung,Phone,Galaxy S21
+Samsung,Phone,Galaxy S20 Ultra
+Samsung,Phone,Galaxy S20+
+Samsung,Phone,Galaxy S20
+Samsung,Phone,Galaxy S10+
+Samsung,Phone,Galaxy S10
+Samsung,Phone,Galaxy S10e
+Samsung,Phone,Galaxy S9+
+Samsung,Phone,Galaxy S9
+Samsung,Phone,Galaxy S8+
+Samsung,Phone,Galaxy S8
+Samsung,Phone,Galaxy S7 Edge
+Samsung,Phone,Galaxy S7
+Samsung,Phone,Galaxy S6 Edge+
+Samsung,Phone,Galaxy S6 Edge
+Samsung,Phone,Galaxy S6
+Samsung,Phone,Galaxy S5
+Samsung,Phone,Galaxy Note 20 Ultra
+Samsung,Phone,Galaxy Note 20
+Samsung,Phone,Galaxy Note 10+
+Samsung,Phone,Galaxy Note 10
+Samsung,Phone,Galaxy Note 9
+Samsung,Phone,Galaxy Note 8
+Samsung,Phone,Galaxy Note 7
+Samsung,Phone,Galaxy Note 5
+Samsung,Phone,Galaxy Note 4
+Samsung,Phone,Galaxy Z Fold 5
+Samsung,Phone,Galaxy Z Fold 4
+Samsung,Phone,Galaxy Z Fold 3
+Samsung,Phone,Galaxy Z Fold 2
+Samsung,Phone,Galaxy Fold
+Samsung,Phone,Galaxy Z Flip 5
+Samsung,Phone,Galaxy Z Flip 4
+Samsung,Phone,Galaxy Z Flip 3
+Samsung,Phone,Galaxy Z Flip
+Samsung,Phone,Galaxy Z Flip 5G
+Samsung,Phone,Galaxy A54
+Samsung,Phone,Galaxy A53
+Samsung,Phone,Galaxy A52
+Samsung,Phone,Galaxy A51
+Samsung,Phone,Galaxy A50
+Samsung,Tablet,Galaxy Tab S9 Ultra
+Samsung,Tablet,Galaxy Tab S9+
+Samsung,Tablet,Galaxy Tab S9
+Samsung,Tablet,Galaxy Tab S8 Ultra
+Samsung,Tablet,Galaxy Tab S8+
+Samsung,Tablet,Galaxy Tab S8
+Samsung,Tablet,Galaxy Tab S7+
+Samsung,Tablet,Galaxy Tab S7
+Samsung,Tablet,Galaxy Tab S6
+Samsung,Tablet,Galaxy Tab S5e
+Samsung,Tablet,Galaxy Tab S4
+Samsung,Tablet,Galaxy Tab A9+
+Samsung,Tablet,Galaxy Tab A8
+Samsung,Tablet,Galaxy Tab A7
+Samsung,Laptop,Galaxy Book4 Series
+Samsung,Laptop,Galaxy Book3 Series
+Samsung,Laptop,Galaxy Book2 Series
+Samsung,Laptop,Galaxy Book Pro Series
+Samsung,Phone,Chromebook Plus / Pro
+Google,Phone,Pixel 8 Pro
+Google,Phone,Pixel 8
+Google,Phone,Pixel 7 Pro
+Google,Phone,Pixel 7
+Google,Phone,Pixel 7a
+Google,Phone,Pixel 6 Pro
+Google,Phone,Pixel 6
+Google,Phone,Pixel 6a
+Google,Phone,Pixel 5
+Google,Phone,Pixel 5a
+Google,Phone,Pixel 4 XL
+Google,Phone,Pixel 4
+Google,Phone,Pixel 4a
+Google,Phone,Pixel 3 XL
+Google,Phone,Pixel 3
+Google,Phone,Pixel 3a XL
+Google,Phone,Pixel 3a
+Google,Phone,Pixel 2 XL
+Google,Phone,Pixel 2
+Google,Phone,Pixel XL
+Google,Phone,Pixel
+Google,Phone,Pixel Fold
+Google,Tablet,Pixel Tablet
+Google,Tablet,Pixel Slate
+Google,Phone,Nexus 9
+Google,Phone,Pixelbook Go
+Google,Phone,Pixelbook
+Motorola,Phone,Razr+ (2023)
+Motorola,Phone,Razr (2023)
+Motorola,Phone,Razr 5G
+Motorola,Phone,Razr (2019)
+Motorola,Phone,Edge+ (2023)
+Motorola,Phone,Edge (2023)
+Motorola,Phone,Edge+ (2022)
+Motorola,Phone,Edge 30 Series
+Motorola,Phone,Edge 20 Series
+Motorola,Phone,Edge+ (2020)
+Motorola,Phone,Moto G Stylus (Multiple Gens)
+Motorola,Phone,Moto G Power (Multiple Gens)
+Motorola,Phone,Moto G Play (Multiple Gens)
+Motorola,Phone,Moto X4
+Motorola,Phone,Moto Z4
+Motorola,Phone,Moto Z3
+Motorola,Phone,Moto Z2 Force
+Motorola,Phone,Moto Z
+Motorola,Phone,Nexus 6
+OnePlus,Phone,OnePlus 12
+OnePlus,Phone,OnePlus 12R
+OnePlus,Phone,OnePlus 11
+OnePlus,Phone,OnePlus 10 Pro
+OnePlus,Phone,OnePlus 10T
+OnePlus,Phone,OnePlus 9 Pro
+OnePlus,Phone,OnePlus 9
+OnePlus,Phone,OnePlus 8 Pro
+OnePlus,Phone,OnePlus 8
+OnePlus,Phone,OnePlus 8T
+OnePlus,Phone,OnePlus 7 Pro
+OnePlus,Phone,OnePlus 7
+OnePlus,Phone,OnePlus 7T
+OnePlus,Phone,OnePlus 6
+OnePlus,Phone,OnePlus 6T
+OnePlus,Phone,OnePlus 5
+OnePlus,Phone,OnePlus 5T
+OnePlus,Phone,OnePlus 3
+OnePlus,Phone,OnePlus 3T
+OnePlus,Phone,OnePlus One
+OnePlus,Phone,OnePlus Open
+OnePlus,Tablet,OnePlus Pad
+LG,Phone,LG Wing
+LG,Phone,LG Velvet
+LG,Phone,LG V60 ThinQ
+LG,Phone,LG V50 ThinQ
+LG,Phone,LG V40 ThinQ
+LG,Phone,LG V30
+LG,Phone,LG V20
+LG,Phone,LG V10
+LG,Phone,LG G8 ThinQ
+LG,Phone,LG G7 ThinQ
+LG,Phone,LG G6
+LG,Phone,LG G5
+LG,Phone,LG G4
+LG,Phone,LG G3
+LG,Tablet,LG G Pad Series
+LG,Laptop,LG Gram 17
+LG,Laptop,LG Gram 16
+LG,Laptop,LG Gram 15
+LG,Laptop,LG Gram 14
