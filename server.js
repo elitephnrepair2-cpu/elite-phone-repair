@@ -5,7 +5,7 @@ import { join, extname } from 'path';
 const PORT = process.env.PORT || 8080;
 const PUBLIC_DIR = join(process.cwd(), 'dist');
 
-const MIME_TYPES: Record<string, string> = {
+const MIME_TYPES = {
     '.html': 'text/html',
     '.js': 'text/javascript',
     '.css': 'text/css',
