@@ -7,18 +7,15 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+FROM node:20-alpine
+WORKDIR /app
+RUN npm install -g serve
+COPY --from=builder /app/dist ./dist
 
-# NGINX needs permissions to run on non-root port 8080
-RUN chown -R nginx:nginx /usr/share/nginx/html && chmod -R 755 /usr/share/nginx/html && \
-        chown -R nginx:nginx /var/cache/nginx && \
-        chown -R nginx:nginx /var/log/nginx && \
-        chown -R nginx:nginx /etc/nginx/conf.d
-RUN touch /var/run/nginx.pid && \
-        chown -R nginx:nginx /var/run/nginx.pid
-
-USER nginx
+# Cloud Run injects the PORT environment variable (default 8080)
+ENV PORT=8080
 EXPOSE 8080
-CMD ["nginx", "-g", "daemon off;"]
+
+# -s forces Single-Page Application mode (routing all traffic to index.html)
+# -l explicitly binds to the injected Cloud Run port
+CMD ["sh", "-c", "serve -s dist -l ${PORT}"]
