@@ -18,4 +18,4 @@ EXPOSE 8080
 
 # -s forces Single-Page Application mode (routing all traffic to index.html)
 # -l explicitly binds to the injected Cloud Run port
-CMD ["sh", "-c", "serve -s dist -l ${PORT}"]
+CMD serve -s dist -l $PORT
