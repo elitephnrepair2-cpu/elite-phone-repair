@@ -57,10 +57,12 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
       finalDevice = `${deviceBrand} ${deviceModel}`.trim();
     }
 
-    if (!name || !phone || !finalDevice || !repairCategory || !problemDescription || !heardFrom) {
+    if (!name || !phone || !finalDevice || !repairCategory || !heardFrom) {
       alert("Please fill out all required fields.");
       return;
     }
+
+    const finalProblemDescription = problemDescription.trim() || `Repair Category: ${repairCategory}`;
 
     setIsSubmitting(true);
     try {
@@ -81,7 +83,7 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
         deviceModel: deviceModel || otherDevice,
         device: finalDevice,
         repairCategory,
-        problemDescription,
+        problemDescription: finalProblemDescription,
         callBackNumber,
         heardFrom,
         smsConsent,
