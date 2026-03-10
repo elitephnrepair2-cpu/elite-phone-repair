@@ -186,7 +186,7 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label htmlFor="kiosk-phone" className="block text-base font-semibold text-slate-800 mb-2">Broken Device Number <span className="text-red-500">*</span></label>
+              <label htmlFor="kiosk-phone" className="block text-base font-semibold text-slate-800 mb-2">Phone Number <span className="text-red-500">*</span></label>
               <input
                 id="kiosk-phone"
                 type="tel"
@@ -197,7 +197,7 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
               />
             </div>
             <div>
-              <label htmlFor="kiosk-callback" className="block text-base font-semibold text-slate-800 mb-2">Alternative Phone Number (Optional)</label>
+              <label htmlFor="kiosk-callback" className="block text-base font-semibold text-slate-800 mb-2">Call Back Phone Number (Optional)</label>
               <input
                 id="kiosk-callback"
                 type="tel"

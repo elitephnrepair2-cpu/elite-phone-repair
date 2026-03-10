@@ -205,7 +205,7 @@ const App: React.FC = () => {
         .from('customers')
         .select('id, phone')
         .eq('location', currentLocation)
-        .limit(10) // fetch a few to manually filter in JS if needed
+        // limit removed to ensure all customers are searched
         .then(res => {
           if (res.data) {
             // Find one where the digits match exactly
