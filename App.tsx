@@ -223,16 +223,18 @@ const App: React.FC = () => {
           name: data.name,
           email: data.email || null,
           alt_phone: data.callBackNumber || null,
-          marketing_sms_consent: data.smsConsent,
-          transactional_sms_consent: data.smsConsent,
+          marketing_sms_consent: data.promotionalConsent,
+          transactional_sms_consent: data.transactionalConsent,
           consent_source: 'iPad',
           consent_method: 'checkbox',
           consent_ip: data.consent_ip,
           consent_form_version: data.consent_form_version
         };
 
-        if (data.smsConsent) {
+        if (data.promotionalConsent) {
           updatePayload.marketing_sms_consent_at = now;
+        }
+        if (data.transactionalConsent) {
           updatePayload.transactional_sms_consent_at = now;
         }
 
@@ -249,16 +251,18 @@ const App: React.FC = () => {
           email: data.email || null,
           alt_phone: data.callBackNumber || null,
           location: currentLocation,
-          marketing_sms_consent: data.smsConsent,
-          transactional_sms_consent: data.smsConsent,
+          marketing_sms_consent: data.promotionalConsent,
+          transactional_sms_consent: data.transactionalConsent,
           consent_source: 'iPad',
           consent_method: 'checkbox',
           consent_ip: data.consent_ip,
           consent_form_version: data.consent_form_version
         };
 
-        if (data.smsConsent) {
+        if (data.promotionalConsent) {
           insertData.marketing_sms_consent_at = now;
+        }
+        if (data.transactionalConsent) {
           insertData.transactional_sms_consent_at = now;
         }
 

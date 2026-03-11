@@ -16,7 +16,8 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ onSave, onCancel, initialDa
   const [phone, setPhone] = useState('');
   const [alt_phone, setAltPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [sms_subscribed, setSmsSubscribed] = useState(false);
+  const [transactionalConsent, setTransactionalConsent] = useState(false);
+  const [promotionalConsent, setPromotionalConsent] = useState(false);
 
   useEffect(() => {
     if (initialData) {
@@ -24,16 +25,16 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ onSave, onCancel, initialDa
       setPhone(initialData.phone);
       setAltPhone(initialData.alt_phone || '');
       setEmail(initialData.email || '');
-      // Subscribed if either is true (usually they will be synced now)
-      setSmsSubscribed(!!initialData.marketing_sms_consent || !!initialData.transactional_sms_consent);
+      setTransactionalConsent(!!initialData.transactional_sms_consent);
+      setPromotionalConsent(!!initialData.marketing_sms_consent);
     }
   }, [initialData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !phone) {
-        alert("Name and Phone are required.");
-        return;
+      alert("Name and Phone are required.");
+      return;
     }
 
     let ip = 'unknown';
@@ -45,13 +46,13 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ onSave, onCancel, initialDa
       console.warn("Could not capture IP address:", err);
     }
 
-    onSave({ 
-      name, 
-      phone, 
-      alt_phone, 
-      email, 
-      marketing_sms_consent: sms_subscribed, 
-      transactional_sms_consent: sms_subscribed,
+    onSave({
+      name,
+      phone,
+      alt_phone,
+      email,
+      marketing_sms_consent: promotionalConsent,
+      transactional_sms_consent: transactionalConsent,
       consent_source: 'manual',
       consent_method: 'checkbox',
       consent_ip: ip,
@@ -75,27 +76,27 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ onSave, onCancel, initialDa
           />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="phone" className="block text-base font-semibold text-slate-800 mb-2">Phone Number *</label>
-              <input
-                id="phone"
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full px-3 py-2 bg-white text-slate-900 border border-slate-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="alt_phone" className="block text-base font-semibold text-slate-800 mb-2">Alternate Phone</label>
-              <input
-                id="alt_phone"
-                type="tel"
-                value={alt_phone}
-                onChange={(e) => setAltPhone(e.target.value)}
-                className="w-full px-3 py-2 bg-white text-slate-900 border border-slate-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-              />
-            </div>
+          <div>
+            <label htmlFor="phone" className="block text-base font-semibold text-slate-800 mb-2">Phone Number *</label>
+            <input
+              id="phone"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full px-3 py-2 bg-white text-slate-900 border border-slate-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="alt_phone" className="block text-base font-semibold text-slate-800 mb-2">Alternate Phone</label>
+            <input
+              id="alt_phone"
+              type="tel"
+              value={alt_phone}
+              onChange={(e) => setAltPhone(e.target.value)}
+              className="w-full px-3 py-2 bg-white text-slate-900 border border-slate-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+          </div>
         </div>
         <div>
           <label htmlFor="email" className="block text-base font-semibold text-slate-800 mb-2">Email Address</label>
@@ -107,24 +108,36 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ onSave, onCancel, initialDa
             className="w-full px-3 py-2 bg-white text-slate-900 border border-slate-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
           />
         </div>
-        
-        <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+
+        <div className="space-y-4 p-4 bg-amber-50 rounded-lg border border-amber-200">
+          <p className="text-xs text-amber-800 font-medium pb-2 border-b border-amber-200/50">
+            ⚠️ <strong>Technician Action Required:</strong> Please verbally ask the customer for consent for each of the following before checking these boxes.
+          </p>
+
           <div className="flex items-start gap-3">
             <input
-              id="sms_subscribed"
+              id="transactionalConsent"
               type="checkbox"
-              checked={sms_subscribed}
-              onChange={(e) => setSmsSubscribed(e.target.checked)}
+              checked={transactionalConsent}
+              onChange={(e) => setTransactionalConsent(e.target.checked)}
               className="mt-1 w-5 h-5 text-red-600 border-slate-400 rounded focus:ring-red-500 cursor-pointer"
             />
-            <div className="space-y-1">
-              <label htmlFor="sms_subscribed" className="text-sm font-bold text-slate-800 leading-tight cursor-pointer">
-                Subscribe to SMS Updates & Marketing
-              </label>
-              <p className="text-xs text-amber-800 font-medium">
-                ⚠️ <strong>Technician Action Required:</strong> Please verbally ask the customer for consent to receive both service updates and promotional texts before checking this box.
-              </p>
-            </div>
+            <label htmlFor="transactionalConsent" className="text-sm font-bold text-slate-800 leading-tight cursor-pointer">
+              Subscribe to Informational SMS Updates (Repair Status)
+            </label>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <input
+              id="promotionalConsent"
+              type="checkbox"
+              checked={promotionalConsent}
+              onChange={(e) => setPromotionalConsent(e.target.checked)}
+              className="mt-1 w-5 h-5 text-red-600 border-slate-400 rounded focus:ring-red-500 cursor-pointer"
+            />
+            <label htmlFor="promotionalConsent" className="text-sm font-bold text-slate-800 leading-tight cursor-pointer">
+              Subscribe to Promotional Offers & Marketing SMS
+            </label>
           </div>
         </div>
         <div className="flex justify-end gap-4 pt-4">

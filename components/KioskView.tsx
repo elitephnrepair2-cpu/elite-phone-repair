@@ -15,7 +15,8 @@ interface KioskViewProps {
     problemDescription: string;
     callBackNumber: string;
     heardFrom: string;
-    smsConsent: boolean;
+    transactionalConsent: boolean;
+    promotionalConsent: boolean;
     consent_ip?: string;
     consent_form_version?: string;
   }) => Promise<boolean>;
@@ -37,7 +38,8 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
 
   const [problemDescription, setProblemDescription] = useState('');
   const [heardFrom, setHeardFrom] = useState('');
-  const [smsConsent, setSmsConsent] = useState(false);
+  const [transactionalConsent, setTransactionalConsent] = useState(false);
+  const [promotionalConsent, setPromotionalConsent] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -86,9 +88,10 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
         problemDescription: finalProblemDescription,
         callBackNumber,
         heardFrom,
-        smsConsent,
+        transactionalConsent,
+        promotionalConsent,
         consent_ip: ip,
-        consent_form_version: 'v1.0'
+        consent_form_version: 'v1.1'
       });
       setIsSubmitting(false);
 
@@ -104,7 +107,8 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
         setRepairCategory('');
         setProblemDescription('');
         setHeardFrom('');
-        setSmsConsent(false);
+        setTransactionalConsent(false);
+        setPromotionalConsent(false);
 
         // Show success message and hide it after a few seconds
         setShowSuccess(true);
@@ -307,17 +311,30 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
             ></textarea>
           </div>
 
-          <div className="p-5 bg-slate-50 rounded-lg border border-slate-200">
+          <div className="space-y-4 p-5 bg-slate-50 rounded-lg border border-slate-200">
             <div className="flex items-start gap-4">
               <input
-                id="kiosk-sms-consent"
+                id="kiosk-transactional-consent"
                 type="checkbox"
-                checked={smsConsent}
-                onChange={(e) => setSmsConsent(e.target.checked)}
+                checked={transactionalConsent}
+                onChange={(e) => setTransactionalConsent(e.target.checked)}
                 className="mt-1 w-7 h-7 text-red-600 border-slate-300 rounded focus:ring-red-500 cursor-pointer"
               />
-              <label htmlFor="kiosk-sms-consent" className="text-lg text-slate-700 leading-tight cursor-pointer">
-                I consent to receive <strong>SMS updates</strong> regarding my repair status as well as <strong>promotional offers</strong> and special materials from Elite Phone Repair.
+              <label htmlFor="kiosk-transactional-consent" className="text-lg text-slate-700 leading-tight cursor-pointer">
+                I consent to receive <strong>informational SMS updates</strong> regarding my repair ticket status.
+              </label>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <input
+                id="kiosk-promotional-consent"
+                type="checkbox"
+                checked={promotionalConsent}
+                onChange={(e) => setPromotionalConsent(e.target.checked)}
+                className="mt-1 w-7 h-7 text-red-600 border-slate-300 rounded focus:ring-red-500 cursor-pointer"
+              />
+              <label htmlFor="kiosk-promotional-consent" className="text-lg text-slate-700 leading-tight cursor-pointer">
+                I consent to receive <strong>promotional offers</strong> and special marketing materials from Elite Phone Repair via SMS.
               </label>
             </div>
           </div>
