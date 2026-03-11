@@ -35,7 +35,26 @@ const App: React.FC = () => {
   const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
   const [activeTicket, setActiveTicket] = useState<FullRepairTicket | null>(null);
 
-  const [view, setView] = useState<View>('dashboard');
+  const [view, setView] = useState<View>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('view') === 'kiosk') return 'kiosk';
+      const saved = window.localStorage.getItem('elite_kiosk_active');
+      if (saved === 'true') return 'kiosk';
+    }
+    return 'dashboard';
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (view === 'kiosk') {
+        window.localStorage.setItem('elite_kiosk_active', 'true');
+      } else {
+        window.localStorage.removeItem('elite_kiosk_active');
+      }
+    }
+  }, [view]);
+
   const [edgeSmsStatus, setEdgeSmsStatus] = useState<string | null>(null);
   const [currentLocation, setCurrentLocation] = useLocalStorage<string>('elite_location', 'Beaumont');
   const [settings, setSettings] = useLocalStorage<ShopSettings>('elite_shop_settings', DEFAULT_SETTINGS);
