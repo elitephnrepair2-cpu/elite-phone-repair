@@ -5,11 +5,12 @@ import type { ShopSettings } from '../types';
 
 interface SettingsViewProps {
   settings: ShopSettings;
+  currentLocation: string;
   onSaveSettings: (settings: ShopSettings) => void;
   onBack: () => void;
 }
 
-const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSaveSettings, onBack }) => {
+const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, onSaveSettings, onBack }) => {
   const [form, setForm] = useState<ShopSettings>(settings);
   const [isSaved, setIsSaved] = useState(false);
 
@@ -23,7 +24,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSaveSettings, o
   const [manualToken, setManualToken] = useState('');
   const [manualMerchantId, setManualMerchantId] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
-  const [cloverLocation, setCloverLocation] = useState<string>('Beaumont');
+  const [cloverLocation, setCloverLocation] = useState<string>(currentLocation || 'Beaumont');
 
   useEffect(() => {
     fetchCloverStatus();

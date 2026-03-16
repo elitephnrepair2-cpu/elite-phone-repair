@@ -625,6 +625,7 @@ const App: React.FC = () => {
       case 'settings':
         return <SettingsView
           settings={settings}
+          currentLocation={currentLocation}
           onSaveSettings={setSettings}
           onBack={() => setView('dashboard')}
         />;
