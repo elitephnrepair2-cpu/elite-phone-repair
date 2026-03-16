@@ -1,6 +1,7 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import type { FullRepairTicket, ShopSettings } from '../types';
+import { supabase } from '../supabaseClient';
 
 interface TicketViewProps {
   ticket: FullRepairTicket;
@@ -21,6 +22,36 @@ const TicketView: React.FC<TicketViewProps> = ({
   onTriggerRepairCompleted,
   isKioskFlow
 }) => {
+  const [isSendingClover, setIsSendingClover] = useState(false);
+
+  const handleSendToClover = async () => {
+    if (!ticket.price || ticket.price <= 0) {
+      alert("Please edit the ticket and set a price before sending to Clover.");
+      return;
+    }
+
+    setIsSendingClover(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('clover-api', {
+        body: { action: 'send_payment', amount: ticket.price, ticket_id: ticket.id, location: ticket.location || 'beaumont' }
+      });
+
+      if (error || !data?.ok) {
+        alert("Clover Error: " + (error?.message || data?.error || data?.message || "Unknown error"));
+        return;
+      }
+
+      // If it returns OK, the synchronous payment flow succeeded on the hardware
+      alert("Payment completed successfully on Clover terminal!");
+      if (onTogglePaid && !ticket.is_paid) {
+        await onTogglePaid(ticket.id, true);
+      }
+    } catch (e: any) {
+      alert("Error pushing to Clover terminal: " + e.message);
+    } finally {
+      setIsSendingClover(false);
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -100,7 +131,6 @@ const TicketView: React.FC<TicketViewProps> = ({
                   Notify Customer
                 </button>
               )}
-
               {onTogglePaid && (
                 <button
                   onClick={handleTogglePayment}
@@ -112,7 +142,22 @@ const TicketView: React.FC<TicketViewProps> = ({
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  {ticket.is_paid ? 'Mark Unpaid' : 'Mark Paid'}
+                  {ticket.is_paid ? 'Mark Unpaid' : 'Mark Paid (Manual)'}
+                </button>
+              )}
+
+              {/* Clover Integration Button */}
+              {!ticket.is_paid && (
+                <button
+                  onClick={handleSendToClover}
+                  disabled={isSendingClover}
+                  className="bg-[#00D061] text-white font-bold py-2.5 px-4 rounded-lg hover:bg-green-600 transition-colors flex items-center shadow-md flex-1 md:flex-none disabled:opacity-50"
+                  title="Push transaction to Clover Register"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                  </svg>
+                  {isSendingClover ? 'Terminal Active...' : 'Send to Clover'}
                 </button>
               )}
 

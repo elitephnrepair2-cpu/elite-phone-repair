@@ -39,6 +39,7 @@ const App: React.FC = () => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       if (params.get('view') === 'kiosk') return 'kiosk';
+      if (params.get('view') === 'settings' || params.get('state') === 'settings') return 'settings';
       const saved = window.localStorage.getItem('elite_kiosk_active');
       if (saved === 'true') return 'kiosk';
     }

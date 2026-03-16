@@ -266,6 +266,36 @@ export type Database = {
           }
         ]
       }
+      integration_settings: {
+        Row: {
+          id: string
+          created_at: string
+          provider: string
+          access_token: string | null
+          merchant_id: string | null
+          selected_device_id: string | null
+          is_connected: boolean
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          provider: string
+          access_token?: string | null
+          merchant_id?: string | null
+          selected_device_id?: string | null
+          is_connected?: boolean
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          provider?: string
+          access_token?: string | null
+          merchant_id?: string | null
+          selected_device_id?: string | null
+          is_connected?: boolean
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

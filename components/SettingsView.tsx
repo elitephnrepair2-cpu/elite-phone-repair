@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 import type { ShopSettings } from '../types';
 
 interface SettingsViewProps {
@@ -11,6 +12,111 @@ interface SettingsViewProps {
 const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSaveSettings, onBack }) => {
   const [form, setForm] = useState<ShopSettings>(settings);
   const [isSaved, setIsSaved] = useState(false);
+
+  // Clover Integration State
+  const [isCloverConnected, setIsCloverConnected] = useState(false);
+  const [cloverDevices, setCloverDevices] = useState<any[]>([]);
+  const [selectedCloverDevice, setSelectedCloverDevice] = useState<string>('');
+  const [isLoadingClover, setIsLoadingClover] = useState(true);
+  
+  // Manual Clover Token State
+  const [manualToken, setManualToken] = useState('');
+  const [manualMerchantId, setManualMerchantId] = useState('');
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [cloverLocation, setCloverLocation] = useState<string>('Beaumont');
+
+  useEffect(() => {
+    fetchCloverStatus();
+  }, [cloverLocation]);
+
+  const fetchCloverStatus = async () => {
+    setIsLoadingClover(true);
+    try {
+      const { data } = await supabase
+        .from('integration_settings')
+        .select('*')
+        .eq('provider', `clover_${cloverLocation.toLowerCase()}`)
+        .maybeSingle();
+      
+      if (data && data.is_connected) {
+        setIsCloverConnected(true);
+        setSelectedCloverDevice(data.selected_device_id || '');
+        await fetchCloverDevices();
+      } else {
+        setIsCloverConnected(false);
+        setSelectedCloverDevice('');
+        setCloverDevices([]);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoadingClover(false);
+    }
+  };
+
+  const connectManualToken = async () => {
+    if (!manualToken.trim() || !manualMerchantId.trim()) {
+      alert("Please enter both the API Token and Merchant ID.");
+      return;
+    }
+    
+    setIsConnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('clover-api', {
+        body: { 
+          action: 'save_manual_token', 
+          access_token: manualToken.trim(), 
+          merchant_id: manualMerchantId.trim(),
+          location: cloverLocation.toLowerCase()
+        }
+      });
+      
+      if (data?.ok) {
+        setIsCloverConnected(true);
+        await fetchCloverDevices();
+        setManualToken('');
+        setManualMerchantId('');
+      } else {
+        alert("Failed to save and connect Clover credentials: " + (error?.message || data?.error));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error connecting with manual Clover credentials.");
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const fetchCloverDevices = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('clover-api', {
+        body: { action: 'get_devices', location: cloverLocation.toLowerCase() }
+      });
+      if (data?.ok) {
+        setCloverDevices(data.devices || []);
+      } else {
+         console.log("Failed to load devices", error || data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch devices:', e);
+    } finally {
+      setIsLoadingClover(false);
+    }
+  };
+
+  const handleDeviceChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const deviceId = e.target.value;
+    setSelectedCloverDevice(deviceId);
+    
+    // Save to DB
+    const { error } = await supabase.functions.invoke('clover-api', {
+      body: { action: 'save_device', device_id: deviceId, location: cloverLocation.toLowerCase() }
+    });
+    
+    if (error) {
+      console.error('Failed to save device selection:', error);
+    }
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,6 +239,118 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onSaveSettings, o
               />
               <p className="mt-2 text-xs text-slate-500 italic">This is the code required to close the customer check-in screen.</p>
             </div>
+          </div>
+        </div>
+
+        {/* Clover Integration */}
+        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+          <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+              </svg>
+              Clover Payments Integration
+            </h3>
+            
+            <div className="flex items-center space-x-2">
+              <label className="text-sm font-bold text-slate-700">Location:</label>
+              <select
+                value={cloverLocation}
+                onChange={(e) => setCloverLocation(e.target.value)}
+                className="px-3 py-1.5 bg-white text-slate-900 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm font-medium"
+              >
+                <option value="Beaumont">Beaumont</option>
+                <option value="Houston">Houston</option>
+              </select>
+            </div>
+          </div>
+          <div className="p-6 space-y-4">
+            <p className="text-sm text-slate-600 mb-4">
+              Connect your physical Clover devices to your CRM to stop double-entry. Clicking "Send to Clover" on a ticket will wake up the physical terminal.
+            </p>
+            
+            {/* Connection Status Panel */}
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <p className="font-bold text-slate-800">Connection Status</p>
+                {isLoadingClover ? (
+                  <p className="text-sm text-slate-500">Checking...</p>
+                ) : isCloverConnected ? (
+                  <p className="text-sm text-green-600 font-bold flex items-center">
+                    <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span> Connected
+                  </p>
+                ) : (
+                  <p className="text-sm text-slate-500">Not Connected</p>
+                )}
+              </div>
+              
+              {!isLoadingClover && !isCloverConnected && (
+                <div className="w-full mt-4 space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Clover Merchant ID</label>
+                    <input
+                      type="text"
+                      className="w-full px-4 py-2 bg-white text-slate-900 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 transition-all text-sm font-mono"
+                      placeholder="e.g. AB1C2D3E4F5G6"
+                      value={manualMerchantId}
+                      onChange={(e) => setManualMerchantId(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1">Merchant API Token (REST Pay Display)</label>
+                    <input
+                      type="password"
+                      className="w-full px-4 py-2 bg-white text-slate-900 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 transition-all text-sm font-mono"
+                      placeholder="e.g. 1a2b3c4d-5e6f-7g8h-9i0j-1k2l3m4n5o6p"
+                      value={manualToken}
+                      onChange={(e) => setManualToken(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={connectManualToken}
+                    disabled={isConnecting}
+                    className="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isConnecting ? 'Connecting...' : 'Save & Connect'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Device Selection (Only show if connected) */}
+            {isCloverConnected && (
+              <div className="bg-white p-4 border border-slate-200 rounded-xl space-y-2 mt-4">
+                <label className="block text-sm font-bold text-slate-700">Select Register Terminal</label>
+                <p className="text-xs text-slate-500 mb-2">Which physical Clover device should the CRM push transactions to by default?</p>
+                <select
+                  value={selectedCloverDevice}
+                  onChange={handleDeviceChange}
+                  className="w-full px-4 py-2 bg-slate-50 text-slate-900 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 transition-all font-medium"
+                >
+                  <option value="" disabled>-- Select a Clover Terminal --</option>
+                  {cloverDevices.length === 0 && <option value="" disabled>No physical devices found yet...</option>}
+                  {cloverDevices.map(device => (
+                    <option key={device.id} value={device.id}>
+                      {device.name} {device.model ? `(${device.model})` : ''} - Serial: {device.serial}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (confirm(`Are you sure you want to disconnect Clover for ${cloverLocation}? You will need to re-authorize.`)) {
+                      setIsCloverConnected(false);
+                      setCloverDevices([]);
+                      await supabase.from('integration_settings').update({ is_connected: false, access_token: null, selected_device_id: null }).eq('provider', `clover_${cloverLocation.toLowerCase()}`);
+                    }
+                  }}
+                  className="mt-4 text-xs text-red-500 font-bold hover:underline"
+                >
+                  Disconnect Clover
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
