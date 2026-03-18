@@ -64,6 +64,11 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
       return;
     }
 
+    if (!transactionalConsent) {
+      alert("You must agree to receive service-related messages to continue.");
+      return;
+    }
+
     const finalProblemDescription = problemDescription.trim() || `Repair Category: ${repairCategory}`;
 
     setIsSubmitting(true);
@@ -319,13 +324,15 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
                 checked={transactionalConsent}
                 onChange={(e) => setTransactionalConsent(e.target.checked)}
                 className="mt-1 w-7 h-7 text-red-600 border-slate-300 rounded focus:ring-red-500 cursor-pointer"
+                required
               />
               <label htmlFor="kiosk-transactional-consent" className="text-lg text-slate-700 leading-tight cursor-pointer">
-                I consent to receive <strong>informational SMS updates</strong> regarding my repair ticket status.
+                <span className="font-bold text-red-600 uppercase text-xs tracking-wider block mb-1">Required (Service / Non-Marketing)</span>
+                I agree to receive service-related messages from Elite Phone Repair, including repair updates, appointment reminders, and order notifications.
               </label>
             </div>
 
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-4 mt-6">
               <input
                 id="kiosk-promotional-consent"
                 type="checkbox"
@@ -334,8 +341,21 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
                 className="mt-1 w-7 h-7 text-red-600 border-slate-300 rounded focus:ring-red-500 cursor-pointer"
               />
               <label htmlFor="kiosk-promotional-consent" className="text-lg text-slate-700 leading-tight cursor-pointer">
-                I consent to receive <strong>promotional offers</strong> and special marketing materials from Elite Phone Repair via SMS.
+                <span className="font-bold text-slate-500 uppercase text-xs tracking-wider block mb-1">Optional (Marketing)</span>
+                I agree to receive promotional messages, special offers, and updates from Elite Phone Repair. Message frequency varies. Message &amp; data rates may apply. Reply STOP to opt out or HELP for assistance.
               </label>
+            </div>
+
+            <div className="text-xs text-slate-500 mt-6 space-y-3 border-t border-slate-200 pt-5">
+              <p>By providing your phone number, you consent to receive SMS text messages from Elite Phone Repair regarding your service requests, including repair status updates, appointment reminders, and customer support notifications.</p>
+              <p>If you opt in to receive promotional messages, you agree to receive marketing and promotional texts, including offers, discounts, and product updates.</p>
+              <p>Message frequency may vary. Message and data rates may apply. You can opt out at any time by replying STOP or get help by replying HELP.</p>
+              <p>Your consent is not a condition of purchase.</p>
+              <p>You confirm that you are the authorized user of the phone number provided.</p>
+              <p>View our Terms of Use and Privacy Policy for more information.</p>
+              <p className="font-semibold text-slate-600 mt-4 text-sm bg-slate-100 p-2 rounded">
+                Elite Phone Repair does not sell or share your personal information, including phone numbers, with third parties for marketing purposes.
+              </p>
             </div>
           </div>
 
