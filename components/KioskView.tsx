@@ -328,7 +328,7 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
               />
               <label htmlFor="kiosk-transactional-consent" className="text-lg text-slate-700 leading-tight cursor-pointer">
                 <span className="font-bold text-red-600 uppercase text-xs tracking-wider block mb-1">Required (Service / Non-Marketing)</span>
-                I agree to receive service-related messages from Elite Phone Repair, including repair updates, appointment reminders, and order notifications.
+                I agree to receive account updates and notifications from Elite Phone Repair.
               </label>
             </div>
 
@@ -342,15 +342,15 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
               />
               <label htmlFor="kiosk-promotional-consent" className="text-lg text-slate-700 leading-tight cursor-pointer">
                 <span className="font-bold text-slate-500 uppercase text-xs tracking-wider block mb-1">Optional (Marketing)</span>
-                I agree to receive promotional messages, special offers, and updates from Elite Phone Repair. Message frequency varies. Message &amp; data rates may apply. Reply STOP to opt out or HELP for assistance.
+                I agree to receive marketing messages and special offers from Elite Phone Repair. Message frequency varies. Message &amp; data rates may apply. Reply STOP to opt out or HELP for assistance.
               </label>
             </div>
 
             <div className="text-xs text-slate-500 mt-6 space-y-3 border-t border-slate-200 pt-5">
-              <p>By providing your phone number, you consent to receive SMS text messages from Elite Phone Repair regarding your service requests, including repair status updates, appointment reminders, and customer support notifications.</p>
-              <p>If you opt in to receive promotional messages, you agree to receive marketing and promotional texts, including offers, discounts, and product updates.</p>
+              <p>By providing your phone number, you consent to receive SMS text messages from Elite Phone Repair regarding account updates and notifications.</p>
+              <p>If you opt in to receive promotional messages, you agree to receive marketing messages and special offers.</p>
               <p>Message frequency may vary. Message and data rates may apply. You can opt out at any time by replying STOP or get help by replying HELP.</p>
-              <p>Your consent is not a condition of purchase.</p>
+              <p>Your consent to receive marketing messages is not a condition of purchase.</p>
               <p>You confirm that you are the authorized user of the phone number provided.</p>
               <p>View our Terms of Use and Privacy Policy for more information.</p>
               <p className="font-semibold text-slate-600 mt-4 text-sm bg-slate-100 p-2 rounded">
