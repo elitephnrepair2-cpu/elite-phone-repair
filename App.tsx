@@ -76,19 +76,39 @@ const App: React.FC = () => {
 
   const fetchData = useCallback(async () => {
     try {
-      const { data: customerData } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('location', currentLocation)
-        .order('created_at', { ascending: false });
-      if (customerData) setCustomers(customerData);
+      let allCustomers: Customer[] = [];
+      let page = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('location', currentLocation)
+          .order('created_at', { ascending: false })
+          .range(page * 1000, (page + 1) * 1000 - 1);
+        if (error || !data) break;
+        allCustomers = [...allCustomers, ...data];
+        if (data.length < 1000) hasMore = false;
+        page++;
+      }
+      setCustomers(allCustomers);
 
-      const { data: ticketData } = await supabase
-        .from('tickets')
-        .select('*, customer:customers(*)')
-        .eq('location', currentLocation)
-        .order('created_at', { ascending: false });
-      if (ticketData) setTickets(ticketData as any);
+      let allTickets: RepairTicket[] = [];
+      page = 0;
+      hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('tickets')
+          .select('*, customer:customers(*)')
+          .eq('location', currentLocation)
+          .order('created_at', { ascending: false })
+          .range(page * 1000, (page + 1) * 1000 - 1);
+        if (error || !data) break;
+        allTickets = [...allTickets, ...data as any];
+        if (data.length < 1000) hasMore = false;
+        page++;
+      }
+      setTickets(allTickets as any);
 
       const { data: appointmentData } = await supabase
         .from('appointments')
@@ -220,15 +240,16 @@ const App: React.FC = () => {
       let customerId: string;
       const normalizedPhone = data.phone.replace(/\\D/g, ""); // Strip non-numeric for robust matching
 
-      // Find by phone (handling duplicates safely using .limit(1))
+      // Find by phone (handling duplicates safely bypassing 1000 row limit using ilike)
+      const likePattern = `%${normalizedPhone.split('').join('%')}%`;
       const { data: existing } = await supabase
         .from('customers')
         .select('id, phone')
         .eq('location', currentLocation)
-        // limit removed to ensure all customers are searched
+        .ilike('phone', likePattern)
         .then(res => {
           if (res.data) {
-            // Find one where the digits match exactly
+            // Find one where the digits match exactly from candidates
             const match = res.data.find(c => c.phone && c.phone.replace(/\\D/g, "") === normalizedPhone);
             return { data: match || null };
           }
