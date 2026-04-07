@@ -112,18 +112,20 @@ const App: React.FC = () => {
       }
       setTickets(allTickets as any);
 
-      const { data: appointmentData } = await supabase
+      const { data: appointmentData, error: appointmentError } = await supabase
         .from('appointments')
         .select('*')
         .eq('location', currentLocation)
         .order('date', { ascending: true });
+      if (appointmentError) console.error("Appointment fetch error:", appointmentError);
       if (appointmentData) setAppointments(appointmentData);
 
-      const { data: partsData } = await supabase
+      const { data: partsData, error: partsError } = await supabase
         .from('parts_orders')
         .select('*')
         .eq('location', currentLocation)
         .order('created_at', { ascending: false });
+      if (partsError) console.error("Parts fetch error:", partsError);
       if (partsData) setPartsOrders(partsData);
     } catch (e) {
       console.error("Data fetch error:", e);
@@ -658,15 +660,18 @@ const App: React.FC = () => {
           partsOrders={partsOrders}
           onAddPart={async (part) => {
             const payload = { ...part, location: currentLocation };
-            await supabase.from('parts_orders').insert([payload]);
+            const { error } = await supabase.from('parts_orders').insert([payload]);
+            if (error) alert("Error saving part: " + error.message);
             fetchData();
           }}
           onUpdatePartStatus={async (id, newStatus) => {
-            await supabase.from('parts_orders').update({ status: newStatus }).eq('id', id);
+            const { error } = await supabase.from('parts_orders').update({ status: newStatus }).eq('id', id);
+            if (error) alert("Error updating status: " + error.message);
             fetchData();
           }}
           onDeletePart={async (id) => {
-            await supabase.from('parts_orders').delete().eq('id', id);
+            const { error } = await supabase.from('parts_orders').delete().eq('id', id);
+            if (error) alert("Error deleting part: " + error.message);
             fetchData();
           }}
         />;
