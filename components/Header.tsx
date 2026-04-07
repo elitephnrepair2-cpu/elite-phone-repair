@@ -6,6 +6,7 @@ interface HeaderProps {
     onGoToKiosk: () => void;
     onGoToCustomers: () => void;
     onGoToAppointments: () => void;
+    onGoToParts: () => void;
     onGoToSettings: () => void;
     currentLocation: string;
     onLocationChange: (location: string) => void;
@@ -19,6 +20,7 @@ export const Header: React.FC<HeaderProps> = ({
     onGoToKiosk,
     onGoToCustomers,
     onGoToAppointments,
+    onGoToParts,
     onGoToSettings,
     currentLocation,
     onLocationChange,
@@ -98,6 +100,17 @@ export const Header: React.FC<HeaderProps> = ({
                         </svg>
                         <span className="hidden sm:inline">Customers</span>
                         <span className="sm:hidden">Cust</span>
+                    </button>
+                    <button
+                        onClick={onGoToParts}
+                        className="bg-white border border-slate-300 text-slate-700 font-bold py-2 px-3 lg:px-5 rounded-lg hover:bg-slate-50 transition-colors flex items-center text-sm lg:text-base mr-1"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span className="hidden sm:inline">Parts</span>
+                        <span className="sm:hidden">Parts</span>
                     </button>
                     <button
                         onClick={onGoToAppointments}

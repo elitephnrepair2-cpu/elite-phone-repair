@@ -87,6 +87,7 @@ export type Database = {
           status: string | null
           repair_type: string | null
           estimated_cost: string | null
+          parts_needed: string | null
         }
         Insert: {
           created_at?: string
@@ -104,6 +105,7 @@ export type Database = {
           status?: string | null
           repair_type?: string | null
           estimated_cost?: string | null
+          parts_needed?: string | null
         }
         Update: {
           created_at?: string
@@ -121,6 +123,7 @@ export type Database = {
           status?: string | null
           repair_type?: string | null
           estimated_cost?: string | null
+          parts_needed?: string | null
         }
         Relationships: [
           {
@@ -296,6 +299,33 @@ export type Database = {
         }
         Relationships: []
       }
+      parts_orders: {
+        Row: {
+          id: string
+          created_at: string
+          part_type: string
+          status: string
+          notes: string | null
+          location: string | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          part_type: string
+          status?: string
+          notes?: string | null
+          location?: string | null
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          part_type?: string
+          status?: string
+          notes?: string | null
+          location?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -317,6 +347,7 @@ export type RepairTicket = Database['public']['Tables']['tickets']['Row'];
 export type Quote = Database['public']['Tables']['quotes']['Row'];
 export type Appointment = Database['public']['Tables']['appointments']['Row'];
 export type SmsConsentEvent = Database['public']['Tables']['sms_consent_events']['Row'];
+export type PartsOrder = Database['public']['Tables']['parts_orders']['Row'];
 
 export interface ShopSettings {
   businessName: string;
@@ -330,7 +361,7 @@ export interface FullRepairTicket extends RepairTicket {
   customer: Customer;
 }
 
-export type View = 'dashboard' | 'add_customer' | 'edit_customer' | 'new_ticket' | 'view_ticket' | 'edit_ticket' | 'kiosk' | 'kiosk_login' | 'kiosk_ticket_view' | 'quotes_dashboard' | 'new_quote' | 'edit_quote' | 'appointments_dashboard' | 'settings';
+export type View = 'dashboard' | 'add_customer' | 'edit_customer' | 'new_ticket' | 'view_ticket' | 'edit_ticket' | 'kiosk' | 'kiosk_login' | 'kiosk_ticket_view' | 'quotes_dashboard' | 'new_quote' | 'edit_quote' | 'appointments_dashboard' | 'settings' | 'parts_dashboard';
 
 export type ImportedRow = {
   name: string;

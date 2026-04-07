@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Customer, RepairTicket, View, FullRepairTicket, Quote, Appointment, ShopSettings } from './types';
+import type { Customer, RepairTicket, View, FullRepairTicket, Quote, Appointment, ShopSettings, PartsOrder } from './types';
 import { supabase } from './supabaseClient';
 import CustomerList from './components/CustomerList';
 import CustomerForm from './components/CustomerForm';
@@ -15,6 +15,7 @@ import AppointmentList from './components/AppointmentList';
 import SettingsView from './components/SettingsView';
 import CustomersTableView from './components/CustomersTableView';
 import TodayTicketsList from './components/TodayTicketsList';
+import PartsDashboard from './components/PartsDashboard';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { REPAIR_PRICES } from './constants/prices';
 
@@ -30,6 +31,7 @@ const App: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [tickets, setTickets] = useState<RepairTicket[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [partsOrders, setPartsOrders] = useState<PartsOrder[]>([]);
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
@@ -116,6 +118,13 @@ const App: React.FC = () => {
         .eq('location', currentLocation)
         .order('date', { ascending: true });
       if (appointmentData) setAppointments(appointmentData);
+
+      const { data: partsData } = await supabase
+        .from('parts_orders')
+        .select('*')
+        .eq('location', currentLocation)
+        .order('created_at', { ascending: false });
+      if (partsData) setPartsOrders(partsData);
     } catch (e) {
       console.error("Data fetch error:", e);
     }
@@ -128,6 +137,7 @@ const App: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'parts_orders' }, () => fetchData())
       .subscribe();
 
     return () => {
@@ -643,6 +653,23 @@ const App: React.FC = () => {
           onUpdateAppointment={async (appt) => { await supabase.from('appointments').update(appt).eq('id', appt.id); fetchData(); }}
           onDeleteAppointment={async (id) => { await supabase.from('appointments').delete().eq('id', id); fetchData(); }}
         />;
+      case 'parts_dashboard':
+        return <PartsDashboard
+          partsOrders={partsOrders}
+          onAddPart={async (part) => {
+            const payload = { ...part, location: currentLocation };
+            await supabase.from('parts_orders').insert([payload]);
+            fetchData();
+          }}
+          onUpdatePartStatus={async (id, newStatus) => {
+            await supabase.from('parts_orders').update({ status: newStatus }).eq('id', id);
+            fetchData();
+          }}
+          onDeletePart={async (id) => {
+            await supabase.from('parts_orders').delete().eq('id', id);
+            fetchData();
+          }}
+        />;
       case 'settings':
         return <SettingsView
           settings={settings}
@@ -663,6 +690,7 @@ const App: React.FC = () => {
           onGoToKiosk={() => setView('kiosk_login')}
           onGoToCustomers={() => setView('customers_dashboard')}
           onGoToAppointments={() => setView('appointments_dashboard')}
+          onGoToParts={() => setView('parts_dashboard')}
           onGoToSettings={() => setView('settings')}
           currentLocation={currentLocation}
           onLocationChange={setCurrentLocation}
