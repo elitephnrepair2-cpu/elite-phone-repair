@@ -16,6 +16,7 @@ import SettingsView from './components/SettingsView';
 import CustomersTableView from './components/CustomersTableView';
 import TodayTicketsList from './components/TodayTicketsList';
 import PartsDashboard from './components/PartsDashboard';
+import InstantQuoteWidget from './components/InstantQuoteWidget';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { REPAIR_PRICES } from './constants/prices';
 
@@ -42,6 +43,7 @@ const App: React.FC = () => {
       const params = new URLSearchParams(window.location.search);
       if (params.get('view') === 'kiosk') return 'kiosk';
       if (params.get('view') === 'settings' || params.get('state') === 'settings') return 'settings';
+      if (params.get('view') === 'quote_widget') return 'quote_widget';
       const saved = window.localStorage.getItem('elite_kiosk_active');
       if (saved === 'true') return 'kiosk';
     }
@@ -412,6 +414,9 @@ const App: React.FC = () => {
         correctPassword={settings.kioskPassword}
       />;
     }
+    if (view === 'quote_widget') {
+      return <InstantQuoteWidget />;
+    }
     if (view === 'customers_dashboard') {
       return <CustomersTableView
         customers={customers}
@@ -442,8 +447,11 @@ const App: React.FC = () => {
                 onImportData={() => { }}
                 onExportData={() => { }}
                 onDeleteCustomer={async (id) => {
-                  if (confirm("Delete this customer?")) {
-                    await supabase.from('customers').delete().eq('id', id);
+                  if (confirm("Delete this customer and all their associated records?")) {
+                    await supabase.from('sms_consent_events').delete().eq('customer_id', id);
+                    await supabase.from('tickets').delete().eq('customer_id', id);
+                    const { error } = await supabase.from('customers').delete().eq('id', id);
+                    if (error) alert("Error deleting customer: " + error.message);
                     fetchData();
                   }
                 }}
@@ -580,8 +588,11 @@ const App: React.FC = () => {
                 onImportData={() => { }}
                 onExportData={() => { }}
                 onDeleteCustomer={async (id) => {
-                  if (confirm("Delete this customer?")) {
-                    await supabase.from('customers').delete().eq('id', id);
+                  if (confirm("Delete this customer and all their associated records?")) {
+                    await supabase.from('sms_consent_events').delete().eq('customer_id', id);
+                    await supabase.from('tickets').delete().eq('customer_id', id);
+                    const { error } = await supabase.from('customers').delete().eq('id', id);
+                    if (error) alert("Error deleting customer: " + error.message);
                     fetchData();
                   }
                 }}
@@ -689,7 +700,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col font-sans text-slate-900">
-      {view !== 'kiosk' && view !== 'kiosk_login' && (
+      {view !== 'kiosk' && view !== 'kiosk_login' && view !== 'quote_widget' && (
         <Header
           onLogoClick={() => setView('dashboard')}
           onGoToKiosk={() => setView('kiosk_login')}
@@ -704,10 +715,10 @@ const App: React.FC = () => {
           onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
         />
       )}
-      <main className={`flex-grow ${view === 'kiosk' || view === 'kiosk_login' ? 'flex items-center justify-center bg-slate-900 min-h-screen' : 'container mx-auto px-4 py-8'}`}>
+      <main className={`flex-grow ${(view === 'kiosk' || view === 'kiosk_login') ? 'flex items-center justify-center bg-slate-900 min-h-screen' : view === 'quote_widget' ? 'min-h-screen bg-[#f4f2ee]' : 'container mx-auto px-4 py-8'}`}>
         {renderContent()}
       </main>
-      {view !== 'kiosk' && view !== 'kiosk_login' && <Footer businessName={settings.businessName} />}
+      {view !== 'kiosk' && view !== 'kiosk_login' && view !== 'quote_widget' && <Footer businessName={settings.businessName} />}
     </div>
   );
 };
