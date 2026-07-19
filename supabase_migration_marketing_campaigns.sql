@@ -26,3 +26,40 @@ CREATE POLICY "Allow insert access to authenticated users"
 ON public.marketing_campaigns FOR INSERT 
 TO authenticated, anon 
 WITH CHECK (true);
+
+-- Create the scheduled campaigns table
+CREATE TABLE IF NOT EXISTS public.scheduled_campaigns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  scheduled_for TIMESTAMP WITH TIME ZONE NOT NULL,
+  name TEXT NOT NULL,
+  location TEXT NOT NULL,
+  message_body TEXT NOT NULL,
+  status TEXT DEFAULT 'pending' NOT NULL,
+  total_recipients INTEGER DEFAULT 0,
+  successful_sends INTEGER DEFAULT 0
+);
+
+-- Enable RLS for scheduled campaigns
+ALTER TABLE public.scheduled_campaigns ENABLE ROW LEVEL SECURITY;
+
+-- Create policies for scheduled campaigns
+CREATE POLICY "Allow read access to scheduled campaigns" 
+ON public.scheduled_campaigns FOR SELECT 
+TO authenticated, anon 
+USING (true);
+
+CREATE POLICY "Allow insert access to scheduled campaigns" 
+ON public.scheduled_campaigns FOR INSERT 
+TO authenticated, anon 
+WITH CHECK (true);
+
+CREATE POLICY "Allow update access to scheduled campaigns" 
+ON public.scheduled_campaigns FOR UPDATE 
+TO authenticated, anon 
+USING (true);
+
+CREATE POLICY "Allow delete access to scheduled campaigns" 
+ON public.scheduled_campaigns FOR DELETE 
+TO authenticated, anon 
+USING (true);
