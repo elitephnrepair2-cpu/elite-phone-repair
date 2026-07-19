@@ -19,6 +19,7 @@ import PartsDashboard from './components/PartsDashboard';
 import InstantQuoteWidget from './components/InstantQuoteWidget';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { REPAIR_PRICES } from './constants/prices';
+import { sendSmsIfAllowed } from './services/smsService';
 
 const DEFAULT_SETTINGS: ShopSettings = {
   businessName: 'Elite Phone Repair',
@@ -61,6 +62,11 @@ const App: React.FC = () => {
   }, [view]);
 
   const [edgeSmsStatus, setEdgeSmsStatus] = useState<string | null>(null);
+  const [modal, setModal] = useState<{
+    type: 'alert' | 'confirm';
+    message: string;
+    onConfirm?: () => void;
+  } | null>(null);
   const [currentLocation, setCurrentLocation] = useLocalStorage<string>('elite_location', 'Beaumont');
   const [settings, setSettings] = useLocalStorage<ShopSettings>('elite_shop_settings', DEFAULT_SETTINGS);
 
@@ -77,6 +83,14 @@ const App: React.FC = () => {
   const selectedCustomer = useMemo(() =>
     customers.find(c => c.id === selectedCustomerId) || null
     , [customers, selectedCustomerId]);
+
+  const showAlert = (message: string) => {
+    setModal({ type: 'alert', message });
+  };
+
+  const showConfirm = (message: string, onConfirm: () => void) => {
+    setModal({ type: 'confirm', message, onConfirm });
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -219,9 +233,14 @@ const App: React.FC = () => {
   };
 
   const handleMarkAsPaid = async (ticketId: string, isPaid: boolean) => {
+    const updatePayload: any = { is_paid: isPaid };
+    if (isPaid) {
+      updatePayload.status = 'Completed';
+    }
+
     const { data: ticket, error } = await supabase
       .from('tickets')
-      .update({ is_paid: isPaid })
+      .update(updatePayload)
       .eq('id', ticketId)
       .select('*, customer:customers(*)')
       .single();
@@ -246,6 +265,32 @@ const App: React.FC = () => {
       alert(error.message);
     } else {
       fetchData();
+    }
+  };
+
+  const handleNotifyCustomer = async (ticket: FullRepairTicket) => {
+    const { data: updatedTicket, error } = await supabase
+      .from('tickets')
+      .update({ status: 'Ready for Pickup' })
+      .eq('id', ticket.id)
+      .select('*, customer:customers(*)')
+      .single();
+
+    if (error) {
+      showAlert("Error updating status: " + error.message);
+    } else if (updatedTicket) {
+      fetchData();
+      if (activeTicket?.id === ticket.id) {
+        setActiveTicket(updatedTicket as any);
+      }
+
+      const smsContent = `Hi ${updatedTicket.customer.name}, your ${updatedTicket.device} is ready for pickup! Total: $${updatedTicket.price || 0}. - ${settings.businessName}`;
+      const res = await sendSmsIfAllowed(updatedTicket.customer, 'transactional', smsContent, [updatedTicket]);
+      if (res.success) {
+        showAlert("Customer notified successfully via SMS!");
+      } else {
+        showAlert("Status updated, but SMS notification skipped/failed: " + (res.reason || "Unknown reason"));
+      }
     }
   };
 
@@ -335,7 +380,7 @@ const App: React.FC = () => {
         ? REPAIR_PRICES[data.deviceBrand]?.[data.deviceModel]?.[data.repairCategory] || null
         : null;
 
-      const { error: ticketError } = await supabase.from('tickets').insert([{
+      const { data: ticket, error: ticketError } = await supabase.from('tickets').insert([{
         customer_id: customerId,
         device: data.device,
         problem_description: data.problemDescription,
@@ -343,9 +388,9 @@ const App: React.FC = () => {
         location: currentLocation,
         repair_type: data.repairCategory || null,
         estimated_cost: estimatedCost
-      }]);
+      }]).select().single();
 
-      if (ticketError) {
+      if (ticketError || !ticket) {
         console.error("Ticket creation error:", ticketError);
         return false;
       }
@@ -359,44 +404,36 @@ const App: React.FC = () => {
   };
 
   const handleTestEdgeSms = async () => {
+    if (!selectedCustomer) {
+      alert("Please select a customer first.");
+      return;
+    }
     setEdgeSmsStatus('Sending...');
-    // @ts-ignore - accessing internal property for logging as requested
-    const supabaseUrl = supabase.supabaseUrl || (supabase as any).auth?.url?.replace('/auth/v1', '') || 'https://tbcvbxvqicowjtbggkfa.supabase.co';
-    console.log('SUPABASE_URL', supabaseUrl);
 
     try {
-      const { data, error } = await supabase.functions.invoke('send-sms', {
-        body: {
-          customer_id: selectedCustomer?.id || '00000000-0000-0000-0000-000000000000',
-          message_type: 'transactional',
-          content: 'Twilio Edge function test from CRM UI',
-          ticket_id: null
-        }
-      });
+      const customerTickets = tickets.filter(t => t.customer_id === selectedCustomer.id);
+      const res = await sendSmsIfAllowed(
+        selectedCustomer,
+        'transactional',
+        'Twilio Edge function test from CRM UI',
+        customerTickets
+      );
 
-      console.log("send-sms data:", data);
-      console.log("send-sms error:", error);
-      console.log("send-sms error context:", (error as any)?.context);
+      console.log("handleTestEdgeSms routing/send result:", res);
 
-      if (error && (error as any).context) {
-        const res = (error as any).context as Response;
-        // Read body safely (Response can only be read once)
-        const bodyText = await res.clone().text();
-        console.log("send-sms status:", res.status);
-        console.log("send-sms response body:", bodyText);
-      }
-
-      if (error) {
-        setEdgeSmsStatus('Error');
-      } else {
+      if (res.success) {
         setEdgeSmsStatus('Success');
+      } else {
+        console.error("Test SMS skipped/failed:", res.reason);
+        setEdgeSmsStatus(res.reason ? 'Blocked' : 'Error');
+        alert(res.reason || "SMS failed to send. Check browser console logs.");
       }
     } catch (err) {
       console.error('EDGE FUNCTION EXCEPTION:', err);
       setEdgeSmsStatus('Error');
     }
 
-    setTimeout(() => setEdgeSmsStatus(null), 3000);
+    setTimeout(() => setEdgeSmsStatus(null), 5000);
   };
 
   const renderContent = () => {
@@ -446,14 +483,18 @@ const App: React.FC = () => {
                 }}
                 onImportData={() => { }}
                 onExportData={() => { }}
-                onDeleteCustomer={async (id) => {
-                  if (confirm("Delete this customer and all their associated records?")) {
+                onDeleteCustomer={(id) => {
+                  showConfirm("Delete this customer and all their associated records?", async () => {
                     await supabase.from('sms_consent_events').delete().eq('customer_id', id);
                     await supabase.from('tickets').delete().eq('customer_id', id);
                     const { error } = await supabase.from('customers').delete().eq('id', id);
-                    if (error) alert("Error deleting customer: " + error.message);
+                    if (error) {
+                      showAlert("Error deleting customer: " + error.message);
+                    } else {
+                      showAlert("Customer deleted successfully.");
+                    }
                     fetchData();
-                  }
+                  });
                 }}
               />
             </div>
@@ -587,14 +628,18 @@ const App: React.FC = () => {
                 }}
                 onImportData={() => { }}
                 onExportData={() => { }}
-                onDeleteCustomer={async (id) => {
-                  if (confirm("Delete this customer and all their associated records?")) {
+                onDeleteCustomer={(id) => {
+                  showConfirm("Delete this customer and all their associated records?", async () => {
                     await supabase.from('sms_consent_events').delete().eq('customer_id', id);
                     await supabase.from('tickets').delete().eq('customer_id', id);
                     const { error } = await supabase.from('customers').delete().eq('id', id);
-                    if (error) alert("Error deleting customer: " + error.message);
+                    if (error) {
+                      showAlert("Error deleting customer: " + error.message);
+                    } else {
+                      showAlert("Customer deleted successfully.");
+                    }
                     fetchData();
-                  }
+                  });
                 }}
               />
             </div>
@@ -657,6 +702,7 @@ const App: React.FC = () => {
           onClose={() => setView('dashboard')}
           onEdit={() => setView('edit_ticket')}
           onTogglePaid={handleMarkAsPaid}
+          onTriggerRepairCompleted={handleNotifyCustomer}
         /> : null;
       case 'appointments_dashboard':
         return <AppointmentList
@@ -719,6 +765,37 @@ const App: React.FC = () => {
         {renderContent()}
       </main>
       {view !== 'kiosk' && view !== 'kiosk_login' && view !== 'quote_widget' && <Footer businessName={settings.businessName} />}
+
+      {modal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold text-slate-900 mb-2">
+              {modal.type === 'confirm' ? 'Confirm Action' : 'Message'}
+            </h3>
+            <p className="text-slate-600 mb-6 text-sm leading-relaxed whitespace-pre-wrap">{modal.message}</p>
+            <div className="flex justify-end gap-3">
+              {modal.type === 'confirm' && (
+                <button
+                  onClick={() => setModal(null)}
+                  className="px-4 py-2 rounded-lg font-bold text-slate-500 hover:bg-slate-100 transition-colors text-sm"
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  const onConfirm = modal.onConfirm;
+                  setModal(null);
+                  if (onConfirm) onConfirm();
+                }}
+                className="px-5 py-2 rounded-lg font-bold bg-red-600 hover:bg-red-700 text-white transition-colors shadow-md shadow-red-200 text-sm"
+              >
+                {modal.type === 'confirm' ? 'Confirm' : 'OK'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
