@@ -17,6 +17,7 @@ import CustomersTableView from './components/CustomersTableView';
 import TodayTicketsList from './components/TodayTicketsList';
 import PartsDashboard from './components/PartsDashboard';
 import InstantQuoteWidget from './components/InstantQuoteWidget';
+import CampaignsView from './components/CampaignsView';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { REPAIR_PRICES } from './constants/prices';
 import { sendSmsIfAllowed } from './services/smsService';
@@ -739,6 +740,12 @@ const App: React.FC = () => {
           onSaveSettings={setSettings}
           onBack={() => setView('dashboard')}
         />;
+      case 'campaigns':
+        return <CampaignsView
+          customers={customers}
+          tickets={tickets}
+          onBack={() => setView('dashboard')}
+        />;
       default:
         return <div className="p-8 text-center text-slate-500">View implementation coming soon...</div>;
     }
@@ -754,6 +761,7 @@ const App: React.FC = () => {
           onGoToAppointments={() => setView('appointments_dashboard')}
           onGoToParts={() => setView('parts_dashboard')}
           onGoToSettings={() => setView('settings')}
+          onGoToCampaigns={() => setView('campaigns')}
           currentLocation={currentLocation}
           onLocationChange={setCurrentLocation}
           businessName={settings.businessName}

@@ -98,6 +98,7 @@ export const sendSmsViaEdgeFunction = async (payload: {
   message_type: 'transactional' | 'marketing';
   content: string;
   ticket_id: string | null;
+  campaign_id?: string;
 }) => {
   console.log("INVOKING EDGE FUNCTION 'send-sms'", payload);
   

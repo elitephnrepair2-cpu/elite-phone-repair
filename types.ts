@@ -361,7 +361,17 @@ export interface FullRepairTicket extends RepairTicket {
   customer: Customer;
 }
 
-export type View = 'dashboard' | 'add_customer' | 'edit_customer' | 'new_ticket' | 'view_ticket' | 'edit_ticket' | 'kiosk' | 'kiosk_login' | 'kiosk_ticket_view' | 'quotes_dashboard' | 'new_quote' | 'edit_quote' | 'appointments_dashboard' | 'settings' | 'parts_dashboard' | 'quote_widget';
+export interface MarketingCampaign {
+  id: string;
+  created_at: string;
+  name: string;
+  location: string;
+  message_body: string;
+  total_recipients: number;
+  successful_sends: number;
+}
+
+export type View = 'dashboard' | 'add_customer' | 'edit_customer' | 'new_ticket' | 'view_ticket' | 'edit_ticket' | 'kiosk' | 'kiosk_login' | 'kiosk_ticket_view' | 'quotes_dashboard' | 'new_quote' | 'edit_quote' | 'appointments_dashboard' | 'settings' | 'parts_dashboard' | 'quote_widget' | 'campaigns';
 
 export type ImportedRow = {
   name: string;

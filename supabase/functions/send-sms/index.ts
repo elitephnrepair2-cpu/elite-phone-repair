@@ -18,7 +18,7 @@ serve(async (req) => {
     const supabaseClient = createClient(supabaseUrl, supabaseServiceKey)
 
     const body = await req.json()
-    const { customer_id, message_type, content, ticket_id } = body
+    const { customer_id, message_type, content, ticket_id, campaign_id } = body
 
     if (!customer_id || !message_type || !content) {
       throw new Error("Missing required fields: customer_id, message_type, content")
@@ -79,7 +79,8 @@ serve(async (req) => {
           message_type,
           content,
           status: 'skipped',
-          error_message: reason
+          error_message: reason,
+          campaign_id
         })
 
       if (logError) console.error("Failed to log skipped message:", logError)
@@ -127,7 +128,8 @@ serve(async (req) => {
           message_type,
           content,
           status: 'sent',
-          provider_message_id: twilioData.sid
+          provider_message_id: twilioData.sid,
+          campaign_id
         })
 
       if (logError) console.error("Failed to log sent message:", logError)
@@ -147,7 +149,8 @@ serve(async (req) => {
           message_type,
           content,
           status: 'failed',
-          error_message: errorMessage
+          error_message: errorMessage,
+          campaign_id
         })
 
       if (logError) console.error("Failed to log failed message:", logError)
