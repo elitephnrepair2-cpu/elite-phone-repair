@@ -38,8 +38,8 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
 
   const [problemDescription, setProblemDescription] = useState('');
   const [heardFrom, setHeardFrom] = useState('');
-  const [transactionalConsent, setTransactionalConsent] = useState(false);
-  const [promotionalConsent, setPromotionalConsent] = useState(false);
+  const [transactionalConsent, setTransactionalConsent] = useState(true);
+  const [promotionalConsent, setPromotionalConsent] = useState(true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -112,8 +112,8 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
         setRepairCategory('');
         setProblemDescription('');
         setHeardFrom('');
-        setTransactionalConsent(false);
-        setPromotionalConsent(false);
+        setTransactionalConsent(true);
+        setPromotionalConsent(true);
 
         // Show success message and hide it after a few seconds
         setShowSuccess(true);

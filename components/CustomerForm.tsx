@@ -16,8 +16,8 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ onSave, onCancel, initialDa
   const [phone, setPhone] = useState('');
   const [alt_phone, setAltPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [transactionalConsent, setTransactionalConsent] = useState(false);
-  const [promotionalConsent, setPromotionalConsent] = useState(false);
+  const [transactionalConsent, setTransactionalConsent] = useState(true);
+  const [promotionalConsent, setPromotionalConsent] = useState(true);
 
   useEffect(() => {
     if (initialData) {
