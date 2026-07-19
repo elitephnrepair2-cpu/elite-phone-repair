@@ -7,9 +7,17 @@ interface CampaignsViewProps {
   customers: Customer[];
   tickets: RepairTicket[];
   onBack: () => void;
+  showAlert: (message: string) => void;
+  showConfirm: (message: string, onConfirm: () => void) => void;
 }
 
-const CampaignsView: React.FC<CampaignsViewProps> = ({ customers, tickets, onBack }) => {
+const CampaignsView: React.FC<CampaignsViewProps> = ({ 
+  customers, 
+  tickets, 
+  onBack,
+  showAlert,
+  showConfirm
+}) => {
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([]);
   const [scheduledCampaigns, setScheduledCampaigns] = useState<ScheduledCampaign[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -106,188 +114,189 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({ customers, tickets, onBac
   // Handle Launch Campaign
   const handleLaunchCampaign = async () => {
     if (!campaignName.trim()) {
-      alert("Please enter a campaign name.");
+      showAlert("Please enter a campaign name.");
       return;
     }
     if (!messageContent.trim()) {
-      alert("Please enter message content.");
+      showAlert("Please enter message content.");
       return;
     }
     if (consentedRecipients.length === 0) {
-      alert(`There are no eligible consented recipients at the ${targetLocation} location.`);
+      showAlert(`There are no eligible consented recipients at the ${targetLocation} location.`);
       return;
     }
 
     if (sendMode === 'later') {
       if (!scheduledFor) {
-        alert("Please select a date and time for scheduling.");
+        showAlert("Please select a date and time for scheduling.");
         return;
       }
       const schedTime = new Date(scheduledFor).getTime();
       const nowTime = new Date().getTime();
       if (schedTime <= nowTime) {
-        alert("Scheduled date and time must be in the future.");
+        showAlert("Scheduled date and time must be in the future.");
         return;
       }
 
-      const confirmSched = window.confirm(
-        `Confirm scheduling campaign "${campaignName}" for ${new Date(scheduledFor).toLocaleString()}?`
-      );
-      if (!confirmSched) return;
+      showConfirm(
+        `Confirm scheduling campaign "${campaignName}" for ${new Date(scheduledFor).toLocaleString()}?`,
+        async () => {
+          try {
+            const { error } = await supabase
+              .from('scheduled_campaigns')
+              .insert([{
+                name: campaignName,
+                location: targetLocation,
+                message_body: messageContent,
+                scheduled_for: new Date(scheduledFor).toISOString(),
+                status: 'pending',
+                total_recipients: consentedRecipients.length,
+                successful_sends: 0
+              }]);
 
-      try {
-        const { error } = await supabase
-          .from('scheduled_campaigns')
-          .insert([{
-            name: campaignName,
-            location: targetLocation,
-            message_body: messageContent,
-            scheduled_for: new Date(scheduledFor).toISOString(),
-            status: 'pending',
-            total_recipients: consentedRecipients.length,
-            successful_sends: 0
-          }]);
-
-        if (error) {
-          console.error("Failed to schedule campaign:", error);
-          alert("Scheduling failed: " + error.message);
-        } else {
-          alert(`Campaign "${campaignName}" successfully scheduled!`);
-          setCampaignName('');
-          setMessageContent('');
-          setScheduledFor('');
-          setSendMode('now');
-          fetchScheduledCampaigns();
-          setHistoryTab('scheduled');
+            if (error) {
+              console.error("Failed to schedule campaign:", error);
+              showAlert("Scheduling failed: " + error.message);
+            } else {
+              showAlert(`Campaign "${campaignName}" successfully scheduled!`);
+              setCampaignName('');
+              setMessageContent('');
+              setScheduledFor('');
+              setSendMode('now');
+              fetchScheduledCampaigns();
+              setHistoryTab('scheduled');
+            }
+          } catch (e) {
+            console.error(e);
+            showAlert("Error scheduling campaign.");
+          }
         }
-      } catch (e) {
-        console.error(e);
-        alert("Error scheduling campaign.");
-      }
+      );
       return;
     }
 
     // Direct Instant Sending logic
-    const confirmLaunch = window.confirm(
-      `Are you sure you want to launch "${campaignName}"?\nThis will send SMS messages immediately to ${consentedRecipients.length} customers at ${targetLocation}.`
-    );
-
-    if (!confirmLaunch) return;
-
-    setIsSending(true);
-    setSendingProgress({
-      current: 0,
-      total: consentedRecipients.length,
-      success: 0,
-      failed: 0,
-    });
-
-    // 1. Create the campaign entry in DB
-    let campaignId = '';
-    try {
-      const { data, error } = await supabase
-        .from('marketing_campaigns')
-        .insert([{
-          name: campaignName,
-          location: targetLocation,
-          message_body: messageContent,
-          total_recipients: consentedRecipients.length,
-          successful_sends: 0
-        }])
-        .select()
-        .single();
-
-      if (error) {
-        console.error("Failed to log campaign:", error);
-        alert("Database connection failed. Campaign aborted.");
-        setIsSending(false);
-        return;
-      }
-      campaignId = data.id;
-    } catch (e) {
-      console.error(e);
-      alert("Error starting campaign. Aborted.");
-      setIsSending(false);
-      return;
-    }
-
-    // 2. Loop through recipients and execute send
-    let successCount = 0;
-    let failCount = 0;
-
-    for (let i = 0; i < consentedRecipients.length; i++) {
-      const recipient = consentedRecipients[i];
-      const parsedBody = parseMessage(messageContent, recipient);
-
-      setSendingProgress(prev => ({ ...prev, current: i + 1 }));
-
-      try {
-        const res = await sendSmsViaEdgeFunction({
-          customer_id: recipient.id,
-          message_type: 'marketing',
-          content: parsedBody,
-          ticket_id: null,
-          campaign_id: campaignId
+    showConfirm(
+      `Are you sure you want to launch "${campaignName}"?\nThis will send SMS messages immediately to ${consentedRecipients.length} customers at ${targetLocation}.`,
+      async () => {
+        setIsSending(true);
+        setSendingProgress({
+          current: 0,
+          total: consentedRecipients.length,
+          success: 0,
+          failed: 0,
         });
 
-        if (res.success) {
-          successCount++;
-        } else {
-          failCount++;
+        // 1. Create the campaign entry in DB
+        let campaignId = '';
+        try {
+          const { data, error } = await supabase
+            .from('marketing_campaigns')
+            .insert([{
+              name: campaignName,
+              location: targetLocation,
+              message_body: messageContent,
+              total_recipients: consentedRecipients.length,
+              successful_sends: 0
+            }])
+            .select()
+            .single();
+
+          if (error) {
+            console.error("Failed to log campaign:", error);
+            showAlert("Database connection failed. Campaign aborted.");
+            setIsSending(false);
+            return;
+          }
+          campaignId = data.id;
+        } catch (e) {
+          console.error(e);
+          showAlert("Error starting campaign. Aborted.");
+          setIsSending(false);
+          return;
         }
-      } catch (err) {
-        console.error("Failed to send message during campaign:", err);
-        failCount++;
+
+        // 2. Loop through recipients and execute send
+        let successCount = 0;
+        let failCount = 0;
+
+        for (let i = 0; i < consentedRecipients.length; i++) {
+          const recipient = consentedRecipients[i];
+          const parsedBody = parseMessage(messageContent, recipient);
+
+          setSendingProgress(prev => ({ ...prev, current: i + 1 }));
+
+          try {
+            const res = await sendSmsViaEdgeFunction({
+              customer_id: recipient.id,
+              message_type: 'marketing',
+              content: parsedBody,
+              ticket_id: null,
+              campaign_id: campaignId
+            });
+
+            if (res.success) {
+              successCount++;
+            } else {
+              failCount++;
+            }
+          } catch (err) {
+            console.error("Failed to send message during campaign:", err);
+            failCount++;
+          }
+
+          setSendingProgress(prev => ({
+            ...prev,
+            success: successCount,
+            failed: failCount
+          }));
+
+          // Delay to respect API limits (1 second pause)
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        // 3. Update campaign counts
+        try {
+          await supabase
+            .from('marketing_campaigns')
+            .update({ successful_sends: successCount })
+            .eq('id', campaignId);
+        } catch (dbErr) {
+          console.error("Failed to update final campaign metrics:", dbErr);
+        }
+
+        // Refresh UI
+        setCampaignName('');
+        setMessageContent('');
+        loadData();
+        setIsSending(false);
+        showAlert(`Campaign complete!\nSuccessful sends: ${successCount}\nFailed sends: ${failCount}`);
       }
-
-      setSendingProgress(prev => ({
-        ...prev,
-        success: successCount,
-        failed: failCount
-      }));
-
-      // Delay to respect API limits (1 second pause)
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-
-    // 3. Update campaign counts
-    try {
-      await supabase
-        .from('marketing_campaigns')
-        .update({ successful_sends: successCount })
-        .eq('id', campaignId);
-    } catch (dbErr) {
-      console.error("Failed to update final campaign metrics:", dbErr);
-    }
-
-    // Refresh UI
-    setCampaignName('');
-    setMessageContent('');
-    loadData();
-    setIsSending(false);
-    alert(`Campaign complete!\nSuccessful sends: ${successCount}\nFailed sends: ${failCount}`);
+    );
   };
 
   // Handle Cancel Scheduled
   const handleCancelScheduled = async (id: string) => {
-    const confirmCancel = window.confirm("Are you sure you want to cancel and delete this scheduled campaign?");
-    if (!confirmCancel) return;
+    showConfirm(
+      "Are you sure you want to cancel and delete this scheduled campaign?",
+      async () => {
+        try {
+          const { error } = await supabase
+            .from('scheduled_campaigns')
+            .delete()
+            .eq('id', id);
 
-    try {
-      const { error } = await supabase
-        .from('scheduled_campaigns')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        alert("Failed to cancel scheduled campaign: " + error.message);
-      } else {
-        alert("Campaign cancelled.");
-        fetchScheduledCampaigns();
+          if (error) {
+            showAlert("Failed to cancel scheduled campaign: " + error.message);
+          } else {
+            showAlert("Campaign cancelled.");
+            fetchScheduledCampaigns();
+          }
+        } catch (e) {
+          console.error(e);
+        }
       }
-    } catch (e) {
-      console.error(e);
-    }
+    );
   };
 
   return (

@@ -745,6 +745,8 @@ const App: React.FC = () => {
           customers={customers}
           tickets={tickets}
           onBack={() => setView('dashboard')}
+          showAlert={showAlert}
+          showConfirm={showConfirm}
         />;
       default:
         return <div className="p-8 text-center text-slate-500">View implementation coming soon...</div>;
