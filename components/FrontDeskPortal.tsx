@@ -15,6 +15,7 @@ interface FrontDeskPortalProps {
   onOpenSMSInbox: () => void;
   onOpenKanban: () => void;
   onOpenTodayList: () => void;
+  onOpenAnalytics?: () => void;
   onEditCustomer: (customer: Customer) => void;
 }
 
@@ -32,6 +33,7 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
   onOpenSMSInbox,
   onOpenKanban,
   onOpenTodayList,
+  onOpenAnalytics,
   onEditCustomer
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -182,6 +184,14 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
               >
                 📋 Today List
               </button>
+              {onOpenAnalytics && (
+                <button
+                  onClick={onOpenAnalytics}
+                  className="px-3 py-1 bg-indigo-600/80 hover:bg-indigo-600 text-white rounded-lg text-xs font-bold transition-all text-left flex items-center gap-1.5 shadow-sm"
+                >
+                  📈 Analytics
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -399,7 +399,7 @@ export interface SmsLog {
   to_phone?: string | null;
 }
 
-export type View = 'dashboard' | 'add_customer' | 'edit_customer' | 'new_ticket' | 'view_ticket' | 'edit_ticket' | 'kiosk' | 'kiosk_login' | 'kiosk_ticket_view' | 'quotes_dashboard' | 'new_quote' | 'edit_quote' | 'appointments_dashboard' | 'settings' | 'parts_dashboard' | 'quote_widget' | 'campaigns' | 'messages';
+export type View = 'dashboard' | 'add_customer' | 'edit_customer' | 'new_ticket' | 'view_ticket' | 'edit_ticket' | 'kiosk' | 'kiosk_login' | 'kiosk_ticket_view' | 'quotes_dashboard' | 'new_quote' | 'edit_quote' | 'appointments_dashboard' | 'settings' | 'parts_dashboard' | 'quote_widget' | 'campaigns' | 'messages' | 'analytics';
 
 export type ImportedRow = {
   name: string;

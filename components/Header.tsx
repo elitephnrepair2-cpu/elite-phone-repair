@@ -9,6 +9,7 @@ interface HeaderProps {
     onGoToParts: () => void;
     onGoToSettings: () => void;
     onGoToCampaigns: () => void;
+    onGoToAnalytics: () => void;
     onGoToMessages?: () => void;
     currentLocation: string;
     onLocationChange: (location: string) => void;
@@ -26,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
     onGoToParts,
     onGoToSettings,
     onGoToCampaigns,
+    onGoToAnalytics,
     onGoToMessages,
     currentLocation,
     onLocationChange,
@@ -208,6 +210,23 @@ export const Header: React.FC<HeaderProps> = ({
                                     <div className="text-white">Campaigns & Messaging</div>
                                     <div className="text-[11px] text-amber-300/80 font-normal">SMS Broadcasts & Inbox Replies</div>
                                 </div>
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    onGoToAnalytics();
+                                    setIsDrawerOpen(false);
+                                }}
+                                className={`w-full flex items-center gap-3.5 px-4 py-3 text-left font-bold rounded-xl transition-colors ${
+                                    currentView === 'analytics'
+                                        ? 'bg-indigo-500/20 text-white border border-indigo-400/40'
+                                        : 'text-slate-200 hover:bg-slate-800 hover:text-white border border-transparent'
+                                }`}
+                            >
+                                <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                                <span>Analytics & Reports</span>
                             </button>
 
                             <button

@@ -19,6 +19,7 @@ import PartsDashboard from './components/PartsDashboard';
 import InstantQuoteWidget from './components/InstantQuoteWidget';
 import CampaignsView from './components/CampaignsView';
 import { FrontDeskPortal } from './components/FrontDeskPortal';
+import { AnalyticsView } from './components/AnalyticsView';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { REPAIR_PRICES } from './constants/prices';
 import { sendSmsIfAllowed } from './services/smsService';
@@ -516,6 +517,7 @@ const App: React.FC = () => {
             onOpenSMSInbox={() => setView('campaigns')}
             onOpenKanban={() => setView('kanban')}
             onOpenTodayList={() => setView('dashboard_list')}
+            onOpenAnalytics={() => setView('analytics')}
             onEditCustomer={(cust) => {
               setCustomerToEdit(cust);
               setView('edit_customer');
@@ -704,6 +706,14 @@ const App: React.FC = () => {
           }}
           showAlert={showAlert}
         />;
+      case 'analytics':
+        return <AnalyticsView
+          customers={customers}
+          tickets={tickets}
+          currentLocation={currentLocation}
+          onBack={() => setView('dashboard')}
+          onNavigateToCampaigns={() => setView('campaigns')}
+        />;
       default:
         return <div className="p-8 text-center text-slate-500">View implementation coming soon...</div>;
     }
@@ -721,6 +731,7 @@ const App: React.FC = () => {
           onGoToParts={() => setView('parts_dashboard')}
           onGoToSettings={() => setView('settings')}
           onGoToCampaigns={() => setView('campaigns')}
+          onGoToAnalytics={() => setView('analytics')}
           onGoToMessages={() => setView('messages')}
           currentLocation={currentLocation}
           onLocationChange={setCurrentLocation}
