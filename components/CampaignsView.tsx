@@ -41,6 +41,7 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
   const [segmentMode, setSegmentMode] = useState<'unmessaged_only' | 'messaged_only' | 'all'>('unmessaged_only');
   const [enableExclusion, setEnableExclusion] = useState<boolean>(false);
   const [selectedExcludeCampaignId, setSelectedExcludeCampaignId] = useState<string>('');
+  const [recipientLimit, setRecipientLimit] = useState<string>('');
   const [messagedCustomerIds, setMessagedCustomerIds] = useState<Set<string>>(new Set());
   const [campaignCustomerMap, setCampaignCustomerMap] = useState<Map<string, Set<string>>>(new Map());
   const [showSegmentDetailsModal, setShowSegmentDetailsModal] = useState<boolean>(false);
@@ -152,7 +153,7 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
     try {
       const { data: logs } = await supabase
         .from('sms_messages')
-        .select('customer_id, campaign_id')
+        .select('customer_id, campaign_id, status')
         .eq('direction', 'outbound');
 
       if (logs) {
@@ -161,9 +162,12 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
 
         logs.forEach(l => {
           if (l.customer_id) {
-            set.add(l.customer_id);
+            // Only count as messaged if the send attempt did not fail
+            if (l.status !== 'failed') {
+              set.add(l.customer_id);
+            }
 
-            if (l.campaign_id) {
+            if (l.campaign_id && l.status !== 'failed') {
               if (!campMap.has(l.campaign_id)) {
                 campMap.set(l.campaign_id, new Set());
               }
@@ -214,8 +218,14 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
     return true;
   });
 
-  // Final Consented recipients ready to receive SMS
-  const consentedRecipients = segmentedCustomers.filter(c => c.marketing_sms_consent === true);
+  // All eligible consented recipients in segment
+  const eligibleConsentedRecipients = segmentedCustomers.filter(c => c.marketing_sms_consent === true);
+
+  // Apply Recipient Batch Limit if specified
+  const recipientLimitNum = recipientLimit ? parseInt(recipientLimit, 10) : 0;
+  const consentedRecipients = (recipientLimitNum > 0 && recipientLimitNum < eligibleConsentedRecipients.length)
+    ? eligibleConsentedRecipients.slice(0, recipientLimitNum)
+    : eligibleConsentedRecipients;
 
   // Helper to parse tags
   const parseMessage = (template: string, customer: Customer) => {
@@ -589,6 +599,58 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
                   </select>
                 </div>
               )}
+            </div>
+
+            {/* Step 3: Recipient Quantity & Batch Size Control */}
+            <div className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-200/80 space-y-3 shadow-sm">
+              <div className="flex justify-between items-center">
+                <label className="text-sm font-bold text-indigo-950 flex items-center gap-2">
+                  <span>📊 Recipient Quantity & Batch Limit</span>
+                </label>
+                <span className="text-[11px] font-extrabold text-indigo-700 bg-indigo-100/90 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                  {recipientLimitNum > 0 && recipientLimitNum < eligibleConsentedRecipients.length
+                    ? `Limiting to ${recipientLimitNum} of ${eligibleConsentedRecipients.length}`
+                    : `Sending to All ${eligibleConsentedRecipients.length} eligible`}
+                </span>
+              </div>
+
+              <p className="text-xs text-indigo-900/80 font-medium">
+                Select or type the max number of contacts to message in this batch (ideal for managing Twilio credit balance).
+              </p>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {['', '25', '50', '100', '250', '500'].map(preset => {
+                  const isActive = recipientLimit === preset || (preset === '' && recipientLimit === '');
+                  const label = preset === '' ? `All (${eligibleConsentedRecipients.length})` : preset;
+                  return (
+                    <button
+                      key={preset || 'all'}
+                      type="button"
+                      onClick={() => setRecipientLimit(preset)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all border ${
+                        isActive
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                          : 'bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-100/60'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center gap-3 pt-2 border-t border-indigo-200/50">
+                <span className="text-xs font-bold text-indigo-950 whitespace-nowrap">Or Custom Quantity:</span>
+                <input
+                  type="number"
+                  placeholder={`Max contacts (e.g. 300)`}
+                  value={recipientLimit}
+                  onChange={e => setRecipientLimit(e.target.value)}
+                  min="1"
+                  max={eligibleConsentedRecipients.length}
+                  className="w-full px-3 py-1.5 bg-white border border-indigo-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-xs font-extrabold text-indigo-950"
+                />
+              </div>
             </div>
 
             {/* Scheduled Date Time input picker */}
