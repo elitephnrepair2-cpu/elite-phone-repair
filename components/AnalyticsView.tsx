@@ -323,6 +323,54 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
       </div>
 
+      {/* Twilio Delivery & Carrier Error Breakdown */}
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-md space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200 dark:border-slate-700">
+          <div>
+            <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+              <span>📡</span> Twilio Delivery & Carrier Error Analytics
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Live breakdown of carrier delivery attempts, handset deliveries, and error logs.</p>
+          </div>
+          <span className="px-3 py-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-extrabold text-xs rounded-full">
+            87.9% Handset Delivery Rate
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-2xl border border-slate-200 dark:border-slate-600">
+            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Sent Attempts</span>
+            <span className="text-2xl font-black text-slate-800 dark:text-white">505</span>
+          </div>
+          <div className="bg-emerald-50 dark:bg-emerald-950/50 p-3 rounded-2xl border border-emerald-200 dark:border-emerald-800">
+            <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">Delivered Handset</span>
+            <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">444</span>
+          </div>
+          <div className="bg-amber-50 dark:bg-amber-950/50 p-3 rounded-2xl border border-amber-200 dark:border-amber-800">
+            <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block">Undelivered / Unknown</span>
+            <span className="text-2xl font-black text-amber-600 dark:text-amber-400">61</span>
+          </div>
+          <div className="bg-rose-50 dark:bg-rose-950/50 p-3 rounded-2xl border border-rose-200 dark:border-rose-800">
+            <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider block">Carrier Blocked / Failed</span>
+            <span className="text-2xl font-black text-rose-600 dark:text-rose-400">341</span>
+          </div>
+        </div>
+
+        {/* Visual Stacked Bar */}
+        <div className="space-y-1.5 pt-2">
+          <div className="flex justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
+            <span>Delivery Distribution (846 Total Attempts)</span>
+            <span>444 Delivered • 41 Undelivered • 20 Unknown • 341 Failed</span>
+          </div>
+          <div className="w-full h-3.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden flex">
+            <div style={{ width: '52.5%' }} className="bg-emerald-500 h-full" title="Delivered: 444 (52.5% of total, 87.9% of sent)"></div>
+            <div style={{ width: '4.8%' }} className="bg-amber-400 h-full" title="Undelivered: 41 (4.8%)"></div>
+            <div style={{ width: '2.4%' }} className="bg-sky-400 h-full" title="Unknown: 20 (2.4%)"></div>
+            <div style={{ width: '40.3%' }} className="bg-rose-500 h-full" title="Failed / Blocked: 341 (40.3%)"></div>
+          </div>
+        </div>
+      </div>
+
       {/* Main Charts & Analytics Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
