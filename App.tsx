@@ -713,6 +713,7 @@ const App: React.FC = () => {
     <div className="min-h-screen flex flex-col font-sans text-slate-900">
       {view !== 'kiosk' && view !== 'kiosk_login' && view !== 'quote_widget' && (
         <Header
+          currentView={view}
           onLogoClick={() => setView('dashboard')}
           onGoToKiosk={() => setView('kiosk_login')}
           onGoToCustomers={() => setView('customers_dashboard')}
