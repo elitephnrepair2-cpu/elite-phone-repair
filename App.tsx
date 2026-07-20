@@ -282,6 +282,37 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteCustomer = (id: string) => {
+    showConfirm("Are you sure you want to delete this customer and all their associated repair tickets?", async () => {
+      await supabase.from('sms_consent_events').delete().eq('customer_id', id);
+      await supabase.from('tickets').delete().eq('customer_id', id);
+      const { error } = await supabase.from('customers').delete().eq('id', id);
+      if (error) {
+        showAlert("Error deleting customer: " + error.message);
+      } else {
+        showAlert("Customer deleted successfully.");
+        if (selectedCustomerId === id) setSelectedCustomerId(null);
+        fetchData();
+      }
+    });
+  };
+
+  const handleDeleteTicket = (id: string) => {
+    showConfirm("Are you sure you want to delete this repair ticket?", async () => {
+      const { error } = await supabase.from('tickets').delete().eq('id', id);
+      if (error) {
+        showAlert("Error deleting ticket: " + error.message);
+      } else {
+        showAlert("Repair ticket deleted successfully.");
+        if (activeTicket?.id === id) {
+          setActiveTicket(null);
+          setView('dashboard');
+        }
+        fetchData();
+      }
+    });
+  };
+
   const handleCreateTicket = async (ticketData: Omit<RepairTicket, 'id' | 'customer_id' | 'created_at' | 'location'>) => {
     if (!selectedCustomer) return;
     const payload = {
@@ -567,6 +598,7 @@ const App: React.FC = () => {
           setCustomerToEdit(null);
           setView('add_customer');
         }}
+        onDeleteCustomer={handleDeleteCustomer}
       />;
     }
 
@@ -603,6 +635,8 @@ const App: React.FC = () => {
               setCustomerToEdit(cust);
               setView('edit_customer');
             }}
+            onDeleteCustomer={handleDeleteCustomer}
+            onDeleteTicket={handleDeleteTicket}
           />
         );
       case 'kanban':
@@ -636,6 +670,7 @@ const App: React.FC = () => {
                 setView('view_ticket');
               }}
               onTogglePaid={handleMarkAsPaid}
+              onDeleteTicket={handleDeleteTicket}
             />
           </div>
         );
@@ -653,19 +688,7 @@ const App: React.FC = () => {
                 }}
                 onImportData={() => { }}
                 onExportData={() => { }}
-                onDeleteCustomer={(id) => {
-                  showConfirm("Delete this customer and all their associated records?", async () => {
-                    await supabase.from('sms_consent_events').delete().eq('customer_id', id);
-                    await supabase.from('tickets').delete().eq('customer_id', id);
-                    const { error } = await supabase.from('customers').delete().eq('id', id);
-                    if (error) {
-                      showAlert("Error deleting customer: " + error.message);
-                    } else {
-                      showAlert("Customer deleted successfully.");
-                    }
-                    fetchData();
-                  });
-                }}
+                onDeleteCustomer={handleDeleteCustomer}
               />
             </div>
             <div className="lg:col-span-2 space-y-6">
@@ -695,6 +718,7 @@ const App: React.FC = () => {
                   }}
                   onTogglePaid={handleMarkAsPaid}
                   onTicketStatusChange={handleUpdateTicketStatus}
+                  onDeleteTicket={handleDeleteTicket}
                 />
               </div>
             </div>
@@ -726,6 +750,7 @@ const App: React.FC = () => {
           shopSettings={settings}
           onClose={() => setView('dashboard')}
           onEdit={() => setView('edit_ticket')}
+          onDelete={handleDeleteTicket}
           onTogglePaid={handleMarkAsPaid}
           onTriggerRepairCompleted={handleNotifyCustomer}
         /> : null;

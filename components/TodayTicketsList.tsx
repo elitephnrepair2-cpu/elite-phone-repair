@@ -6,9 +6,10 @@ interface TodayTicketsListProps {
     onTicketClick: (ticket: FullRepairTicket) => void;
     onTogglePaid: (ticketId: string, isPaid: boolean) => Promise<void>;
     onTicketStatusChange: (ticketId: string, newStatus: string) => Promise<void>;
+    onDeleteTicket?: (ticketId: string) => void;
 }
 
-const TodayTicketsList: React.FC<TodayTicketsListProps> = ({ tickets, onTicketClick, onTogglePaid, onTicketStatusChange }) => {
+const TodayTicketsList: React.FC<TodayTicketsListProps> = ({ tickets, onTicketClick, onTogglePaid, onTicketStatusChange, onDeleteTicket }) => {
     const todaysTickets = useMemo(() => {
         // Get completely local current day string (ignoring timezones)
         const todayStr = new Date().toLocaleDateString('en-CA'); // format: YYYY-MM-DD
@@ -32,6 +33,7 @@ const TodayTicketsList: React.FC<TodayTicketsListProps> = ({ tickets, onTicketCl
                                 <th className="p-4 hidden sm:table-cell">Status</th>
                                 <th className="p-4 hidden md:table-cell text-right">Quote</th>
                                 <th className="p-4 text-center">Paid</th>
+                                <th className="p-4 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -80,6 +82,20 @@ const TodayTicketsList: React.FC<TodayTicketsListProps> = ({ tickets, onTicketCl
                                                 </svg>
                                             )}
                                         </button>
+                                    </td>
+                                    <td className="p-4 text-right">
+                                        {onDeleteTicket && (
+                                            <button
+                                                onClick={() => onDeleteTicket(ticket.id)}
+                                                className="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 ml-auto"
+                                                title="Delete Ticket"
+                                            >
+                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                                Delete
+                                            </button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}

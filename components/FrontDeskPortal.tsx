@@ -17,6 +17,8 @@ interface FrontDeskPortalProps {
   onOpenTodayList: () => void;
   onOpenAnalytics?: () => void;
   onEditCustomer: (customer: Customer) => void;
+  onDeleteCustomer?: (id: string) => void;
+  onDeleteTicket?: (id: string) => void;
 }
 
 export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
@@ -34,7 +36,9 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
   onOpenKanban,
   onOpenTodayList,
   onOpenAnalytics,
-  onEditCustomer
+  onEditCustomer,
+  onDeleteCustomer,
+  onDeleteTicket
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const deferredQuery = useDeferredValue(searchQuery);
@@ -383,6 +387,16 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
                   >
                     ✏️ Edit
                   </button>
+
+                  {onDeleteCustomer && (
+                    <button
+                      onClick={() => onDeleteCustomer(selectedCustomer.id)}
+                      className="px-3.5 py-3 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-600 dark:text-red-300 font-bold rounded-2xl transition-colors text-sm flex items-center gap-1"
+                      title="Delete Customer"
+                    >
+                      🗑️ Delete
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -444,11 +458,25 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
                             <span className="font-black text-slate-900 dark:text-white text-lg">
                               ${ticket.total_price || '0.00'}
                             </span>
-                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase ${
-                              ticket.is_paid ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                            }`}>
-                              {ticket.is_paid ? 'Paid' : 'Unpaid'}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase ${
+                                ticket.is_paid ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                              }`}>
+                                {ticket.is_paid ? 'Paid' : 'Unpaid'}
+                              </span>
+                              {onDeleteTicket && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDeleteTicket(ticket.id);
+                                  }}
+                                  className="text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 dark:bg-red-950/60 hover:bg-red-100 dark:hover:bg-red-900/80 px-2 py-0.5 rounded-md transition-colors"
+                                  title="Delete Ticket"
+                                >
+                                  🗑️ Delete
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );

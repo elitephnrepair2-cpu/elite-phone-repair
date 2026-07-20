@@ -6,11 +6,12 @@ interface KanbanBoardProps {
     onTicketStatusChange: (ticketId: string, newStatus: string) => Promise<void>;
     onTicketClick: (ticket: FullRepairTicket) => void;
     onTogglePaid: (ticketId: string, isPaid: boolean) => Promise<void>;
+    onDeleteTicket?: (ticketId: string) => void;
 }
 
 const STATUSES = ['In Queue', 'Diagnosing', 'Waiting on Parts', 'Repairing', 'Ready for Pickup', 'Completed'];
 
-const KanbanBoard: React.FC<KanbanBoardProps> = ({ tickets, onTicketStatusChange, onTicketClick, onTogglePaid }) => {
+const KanbanBoard: React.FC<KanbanBoardProps> = ({ tickets, onTicketStatusChange, onTicketClick, onTogglePaid, onDeleteTicket }) => {
     const [draggedTicket, setDraggedTicket] = useState<string | null>(null);
     const [dragOverStatus, setDragOverStatus] = useState<string | null>(null);
 
@@ -80,23 +81,39 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tickets, onTicketStatusChange
                             >
                                 <div className="flex justify-between items-start mb-2 group">
                                     <p className="font-bold text-slate-800 text-sm truncate pr-2">{ticket.device}</p>
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation(); // prevent opening the ticket modal
-                                            onTogglePaid(ticket.id, !ticket.is_paid);
-                                        }}
-                                        className={`flex-shrink-0 flex items-center justify-center w-6 h-6 rounded border-2 transition-all ${ticket.is_paid
-                                                ? 'bg-green-500 border-green-500'
-                                                : 'bg-white border-slate-300 hover:border-green-400'
-                                            }`}
-                                        title={ticket.is_paid ? 'Mark Unpaid' : 'Mark Paid'}
-                                    >
-                                        {ticket.is_paid && (
-                                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                            </svg>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // prevent opening the ticket modal
+                                                onTogglePaid(ticket.id, !ticket.is_paid);
+                                            }}
+                                            className={`flex items-center justify-center w-6 h-6 rounded border-2 transition-all ${ticket.is_paid
+                                                    ? 'bg-green-500 border-green-500'
+                                                    : 'bg-white border-slate-300 hover:border-green-400'
+                                                }`}
+                                            title={ticket.is_paid ? 'Mark Unpaid' : 'Mark Paid'}
+                                        >
+                                            {ticket.is_paid && (
+                                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            )}
+                                        </button>
+                                        {onDeleteTicket && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onDeleteTicket(ticket.id);
+                                                }}
+                                                className="text-slate-400 hover:text-red-600 p-1 transition-colors"
+                                                title="Delete Ticket"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
                                         )}
-                                    </button>
+                                    </div>
                                 </div>
                                 <p className="text-xs text-slate-500 mb-3 truncate">{ticket.customer.name}</p>
                                 <div className="flex justify-between items-center text-xs text-slate-400">

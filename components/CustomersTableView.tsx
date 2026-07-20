@@ -5,9 +5,10 @@ interface CustomersTableViewProps {
     customers: Customer[];
     onSelectCustomer: (customerId: string) => void;
     onAddNew: () => void;
+    onDeleteCustomer?: (customerId: string) => void;
 }
 
-const CustomersTableView: React.FC<CustomersTableViewProps> = ({ customers, onSelectCustomer, onAddNew }) => {
+const CustomersTableView: React.FC<CustomersTableViewProps> = ({ customers, onSelectCustomer, onAddNew, onDeleteCustomer }) => {
     const [searchTerm, setSearchTerm] = useState('');
 
     const filteredCustomers = useMemo(() => {
@@ -61,7 +62,7 @@ const CustomersTableView: React.FC<CustomersTableViewProps> = ({ customers, onSe
                             <th className="p-4 hidden sm:table-cell">Phone</th>
                             <th className="p-4 hidden md:table-cell">Email</th>
                             <th className="p-4 hidden lg:table-cell">SMS Marketing</th>
-                            <th className="p-4 text-right">Added</th>
+                            <th className="p-4 text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -87,9 +88,33 @@ const CustomersTableView: React.FC<CustomersTableViewProps> = ({ customers, onSe
                                             <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs font-bold uppercase">No</span>
                                         )}
                                     </td>
-                                    <td className="p-4 text-right text-slate-500 font-medium">
-                                        {customer.created_at ? new Date(customer.created_at).toLocaleDateString() : '-'}
-                                        <div className="text-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold uppercase mt-1">View Profile &rarr;</div>
+                                    <td className="p-4 text-right">
+                                        <div className="flex items-center justify-end gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onSelectCustomer(customer.id);
+                                                }}
+                                                className="text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors"
+                                            >
+                                                View
+                                            </button>
+                                            {onDeleteCustomer && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onDeleteCustomer(customer.id);
+                                                    }}
+                                                    className="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                                    title="Delete Customer"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                    Delete
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))
