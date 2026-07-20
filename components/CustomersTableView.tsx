@@ -12,11 +12,11 @@ const CustomersTableView: React.FC<CustomersTableViewProps> = ({ customers, onSe
 
     const filteredCustomers = useMemo(() => {
         const raw = searchTerm.trim().toLowerCase();
-        const sDigits = raw.replace(/\\D/g, "");
+        const sDigits = raw.replace(/\D/g, "");
 
         return customers.filter(customer => {
             const name = (customer.name ?? "").toLowerCase();
-            const phoneDigits = (customer.phone ?? "").replace(/\\D/g, "");
+            const phoneDigits = (customer.phone ?? "").replace(/\D/g, "");
             const email = (customer.email ?? "").toLowerCase();
 
             return name.includes(raw) || phoneDigits.includes(sDigits) || email.includes(raw);

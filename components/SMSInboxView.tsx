@@ -271,7 +271,7 @@ export const SMSInboxView: React.FC<SMSInboxViewProps> = ({
         ? `(${cleanPhone.slice(0, 3)}) ${cleanPhone.slice(3, 6)}-${cleanPhone.slice(6)}`
         : activeConversation.displayPhone;
 
-      const { data, error } = await (supabase as any)
+      let { data, error } = await (supabase as any)
         .from('customers')
         .insert({
           name: newCustName.trim(),
@@ -283,6 +283,24 @@ export const SMSInboxView: React.FC<SMSInboxViewProps> = ({
         })
         .select()
         .single();
+
+      if (error && (error.code === '23505' || error.message?.includes('idx_customers_phone_location'))) {
+        const { data: existingList } = await (supabase as any)
+          .from('customers')
+          .select('*')
+          .eq('location', newCustLocation);
+        const matched = existingList?.find((c: any) => c.phone && c.phone.replace(/\D/g, '') === cleanPhone);
+        if (matched) {
+          const res = await (supabase as any)
+            .from('customers')
+            .update({ name: newCustName.trim(), transactional_sms_consent: true, marketing_sms_consent: true })
+            .eq('id', matched.id)
+            .select()
+            .single();
+          data = res.data;
+          error = res.error;
+        }
+      }
 
       if (error) {
         showAlert(`Error saving customer: ${error.message}`);

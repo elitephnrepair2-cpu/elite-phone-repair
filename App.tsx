@@ -230,15 +230,55 @@ const App: React.FC = () => {
     if (customerToEdit) {
       result = await supabase.from('customers').update(payload).eq('id', customerToEdit.id).select().single();
     } else {
-      result = await supabase.from('customers').insert([payload]).select().single();
+      // Check if a customer with matching phone digits already exists at current location
+      const inputDigits = (customerData.phone || '').replace(/\D/g, '');
+      let existingCustomer: any = null;
+
+      if (inputDigits.length >= 7) {
+        const { data: customersAtLoc } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('location', currentLocation);
+
+        if (customersAtLoc) {
+          existingCustomer = customersAtLoc.find(
+            (c) => c.phone && c.phone.replace(/\D/g, '') === inputDigits
+          );
+        }
+      }
+
+      if (existingCustomer) {
+        // Update existing customer record instead of attempting duplicate insert
+        result = await supabase
+          .from('customers')
+          .update(payload)
+          .eq('id', existingCustomer.id)
+          .select()
+          .single();
+        alert(`A customer with phone number ${customerData.phone} already existed. Updated record for ${existingCustomer.name || 'existing customer'}.`);
+      } else {
+        result = await supabase.from('customers').insert([payload]).select().single();
+
+        // Fallback for duplicate key constraint error "idx_customers_phone_location"
+        if (result.error && (result.error.code === '23505' || result.error.message?.includes('idx_customers_phone_location'))) {
+          const { data: allCust } = await supabase.from('customers').select('*').eq('location', currentLocation);
+          const matched = allCust?.find(c => c.phone && c.phone.replace(/\D/g, '') === inputDigits);
+          if (matched) {
+            result = await supabase.from('customers').update(payload).eq('id', matched.id).select().single();
+            alert(`Updated existing customer record (${matched.name || 'existing customer'}).`);
+          }
+        }
+      }
     }
 
     if (result.error) {
-      alert(result.error.message);
+      alert("Error saving customer: " + result.error.message);
+      return null;
     } else {
       fetchData();
       setView('dashboard');
       setCustomerToEdit(null);
+      return result.data;
     }
   };
 
@@ -347,8 +387,8 @@ const App: React.FC = () => {
 
   const handleKioskCheckIn = async (data: any) => {
     try {
-      let customerId: string;
-      const normalizedPhone = data.phone.replace(/\\D/g, ""); // Strip non-numeric for robust matching
+      let customerId: string | undefined;
+      const normalizedPhone = data.phone.replace(/\D/g, ""); // Strip non-numeric for robust matching
 
       // Find by phone (handling duplicates safely bypassing 1000 row limit using ilike)
       const likePattern = `%${normalizedPhone.split('').join('%')}%`;
@@ -360,7 +400,7 @@ const App: React.FC = () => {
         .then(res => {
           if (res.data) {
             // Find one where the digits match exactly from candidates
-            const match = res.data.find(c => c.phone && c.phone.replace(/\\D/g, "") === normalizedPhone);
+            const match = res.data.find(c => c.phone && c.phone.replace(/\D/g, "") === normalizedPhone);
             return { data: match || null };
           }
           return res;
@@ -417,13 +457,24 @@ const App: React.FC = () => {
           insertData.transactional_sms_consent_at = now;
         }
 
-        const { data: created, error } = await supabase.from('customers').insert([insertData]).select().single();
+        let { data: created, error } = await supabase.from('customers').insert([insertData]).select().single();
 
-        if (error || !created) {
+        if (error && (error.code === '23505' || error.message?.includes('idx_customers_phone_location'))) {
+          const { data: allCust } = await supabase.from('customers').select('*').eq('location', currentLocation);
+          const matched = allCust?.find(c => c.phone && c.phone.replace(/\D/g, '') === normalizedPhone);
+          if (matched) {
+            await supabase.from('customers').update(insertData).eq('id', matched.id);
+            customerId = matched.id;
+            error = null;
+          }
+        } else if (created) {
+          customerId = created.id;
+        }
+
+        if (error || !customerId) {
           console.error("Customer creation error:", error);
           return false;
         }
-        customerId = created.id;
       }
 
       // Calculate automated price quote

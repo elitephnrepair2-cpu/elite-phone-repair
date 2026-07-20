@@ -124,7 +124,7 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
         marketing_sms_consent: newCustConsent,
         transactional_sms_consent: true,
         consent_source: 'manual',
-        consent_method: 'front_desk_intake'
+        consent_method: 'checkbox'
       });
 
       setNewCustName('');
