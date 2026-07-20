@@ -29,7 +29,8 @@ const DEFAULT_SETTINGS: ShopSettings = {
   address: '2215 Calder Ave STE 201, Beaumont, TX 77701',
   phone: '(409) 123-4567',
   warrantyTerms: 'Thank you for your business! Please keep this ticket for your records. A technician will contact you shortly with an update.',
-  kioskPassword: '1271'
+  kioskPassword: '1271',
+  analyticsPassword: 'TILEE'
 };
 
 const App: React.FC = () => {
@@ -41,6 +42,12 @@ const App: React.FC = () => {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
   const [activeTicket, setActiveTicket] = useState<FullRepairTicket | null>(null);
+
+  // Analytics Protection State
+  const [isAnalyticsUnlocked, setIsAnalyticsUnlocked] = useState<boolean>(false);
+  const [showAnalyticsAuthModal, setShowAnalyticsAuthModal] = useState<boolean>(false);
+  const [analyticsInputPass, setAnalyticsInputPass] = useState<string>('');
+  const [analyticsAuthError, setAnalyticsAuthError] = useState<boolean>(false);
 
   const [view, setView] = useState<View>(() => {
     if (typeof window !== 'undefined') {
@@ -93,6 +100,29 @@ const App: React.FC = () => {
 
   const showConfirm = (message: string, onConfirm: () => void) => {
     setModal({ type: 'confirm', message, onConfirm });
+  };
+
+  const handleOpenAnalytics = () => {
+    if (isAnalyticsUnlocked) {
+      setView('analytics');
+    } else {
+      setAnalyticsInputPass('');
+      setAnalyticsAuthError(false);
+      setShowAnalyticsAuthModal(true);
+    }
+  };
+
+  const handleUnlockAnalytics = (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetPass = (settings.analyticsPassword || 'TILEE').trim().toUpperCase();
+    if (analyticsInputPass.trim().toUpperCase() === targetPass) {
+      setIsAnalyticsUnlocked(true);
+      setShowAnalyticsAuthModal(false);
+      setAnalyticsAuthError(false);
+      setView('analytics');
+    } else {
+      setAnalyticsAuthError(true);
+    }
   };
 
   const fetchData = useCallback(async () => {
@@ -517,7 +547,7 @@ const App: React.FC = () => {
             onOpenSMSInbox={() => setView('campaigns')}
             onOpenKanban={() => setView('kanban')}
             onOpenTodayList={() => setView('dashboard_list')}
-            onOpenAnalytics={() => setView('analytics')}
+            onOpenAnalytics={handleOpenAnalytics}
             onEditCustomer={(cust) => {
               setCustomerToEdit(cust);
               setView('edit_customer');
@@ -731,7 +761,7 @@ const App: React.FC = () => {
           onGoToParts={() => setView('parts_dashboard')}
           onGoToSettings={() => setView('settings')}
           onGoToCampaigns={() => setView('campaigns')}
-          onGoToAnalytics={() => setView('analytics')}
+          onGoToAnalytics={handleOpenAnalytics}
           onGoToMessages={() => setView('messages')}
           currentLocation={currentLocation}
           onLocationChange={setCurrentLocation}
@@ -744,6 +774,70 @@ const App: React.FC = () => {
         {renderContent()}
       </main>
       {view !== 'kiosk' && view !== 'kiosk_login' && view !== 'quote_widget' && <Footer businessName={settings.businessName} />}
+
+      {/* Analytics Password Modal */}
+      {showAnalyticsAuthModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 dark:border-slate-700 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center border-b pb-3 border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-xl font-bold text-lg">🔒</span>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white">Analytics Security</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Password required to view reports.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAnalyticsAuthModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUnlockAnalytics} className="space-y-4">
+              <div>
+                <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 mb-1">
+                  Enter Password
+                </label>
+                <input
+                  type="password"
+                  placeholder="Enter Analytics Password..."
+                  value={analyticsInputPass}
+                  onChange={e => {
+                    setAnalyticsInputPass(e.target.value);
+                    if (analyticsAuthError) setAnalyticsAuthError(false);
+                  }}
+                  autoFocus
+                  required
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl font-mono font-bold text-base focus:ring-2 focus:ring-indigo-500 outline-none dark:text-white uppercase tracking-wider"
+                />
+                {analyticsAuthError && (
+                  <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mt-1.5 flex items-center gap-1">
+                    ⚠️ Incorrect Password. Access Denied.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAnalyticsAuthModal(false)}
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-xs shadow-md transition-colors"
+                >
+                  Unlock Dashboard
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {modal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">

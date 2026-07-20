@@ -217,19 +217,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
           </div>
         </div>
 
-        {/* Kiosk Security */}
+        {/* Security Settings */}
         <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
           <div className="p-6 border-b border-slate-100 bg-slate-50">
             <h3 className="text-lg font-bold text-slate-800 flex items-center">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
-              Kiosk Security
+              Security Passwords
             </h3>
           </div>
-          <div className="p-6">
-            <div className="max-w-xs">
-              <label className="block text-sm font-bold text-slate-700 mb-2">Exit Password</label>
+          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">Kiosk Exit PIN</label>
               <input
                 name="kioskPassword"
                 type="text"
@@ -238,7 +238,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
                 className={`${inputClasses} font-mono text-xl`}
                 placeholder="1271"
               />
-              <p className="mt-2 text-xs text-slate-500 italic">This is the code required to close the customer check-in screen.</p>
+              <p className="text-xs text-slate-500 mt-1">PIN required to exit Customer Check-In Kiosk mode.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">Analytics Password</label>
+              <input
+                name="analyticsPassword"
+                type="text"
+                value={form.analyticsPassword || 'TILEE'}
+                onChange={handleChange}
+                className={`${inputClasses} font-mono text-xl uppercase`}
+                placeholder="TILEE"
+              />
+              <p className="text-xs text-slate-500 mt-1">Password required to unlock Shop Analytics & Reports.</p>
             </div>
           </div>
         </div>

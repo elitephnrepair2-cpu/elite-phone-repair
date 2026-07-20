@@ -355,6 +355,7 @@ export interface ShopSettings {
   phone: string;
   warrantyTerms: string;
   kioskPassword: string;
+  analyticsPassword?: string;
 }
 
 export interface FullRepairTicket extends RepairTicket {
