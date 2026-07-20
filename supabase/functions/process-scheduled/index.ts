@@ -28,12 +28,12 @@ serve(async (req) => {
 
     const supabaseClient = createClient(supabaseUrl, supabaseServiceKey)
 
-    // 1. Fetch pending scheduled campaigns that are due
+    // 1. Fetch pending or stuck scheduled campaigns that are due
     const nowIso = new Date().toISOString()
     const { data: pendingCampaigns, error: fetchErr } = await supabaseClient
       .from('scheduled_campaigns')
       .select('*')
-      .eq('status', 'pending')
+      .in('status', ['pending', 'sending'])
       .lte('scheduled_for', nowIso)
 
     if (fetchErr) {
@@ -74,7 +74,6 @@ serve(async (req) => {
       }
 
       if (!customers || customers.length === 0) {
-        // No recipients, mark as completed
         await supabaseClient
           .from('scheduled_campaigns')
           .update({ status: 'completed', total_recipients: 0, successful_sends: 0 })
@@ -105,28 +104,34 @@ serve(async (req) => {
         continue
       }
 
+      // Fetch all tickets once to build a customer_id -> last_device lookup map
+      const customerIds = customers.map(c => c.id)
+      const { data: tickets } = await supabaseClient
+        .from('tickets')
+        .select('customer_id, device, created_at')
+        .in('customer_id', customerIds)
+        .order('created_at', { ascending: false })
+
+      const deviceMap = new Map<string, string>()
+      if (tickets) {
+        for (const t of tickets) {
+          if (!deviceMap.has(t.customer_id) && t.device) {
+            deviceMap.set(t.customer_id, t.device)
+          }
+        }
+      }
+
       let successCount = 0
       let failCount = 0
+      const smsLogBuffer: any[] = []
 
-      // Loop through customers and send SMS
-      for (const customer of customers) {
-        // Find last repaired device for tag replacement
-        const { data: lastTicket } = await supabaseClient
-          .from('tickets')
-          .select('device')
-          .eq('customer_id', customer.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        const lastDevice = lastTicket?.device || 'your device'
-        
-        // Parse message content
+      // Helper function to send single SMS
+      const sendSingleSms = async (customer: typeof customers[0]) => {
+        const lastDevice = deviceMap.get(customer.id) || 'your device'
         let content = campaign.message_body
-        content = content.replace(/{name}/g, customer.name)
-        content = content.replace(/{device}/g, lastDevice)
+          .replace(/{name}/g, customer.name)
+          .replace(/{device}/g, lastDevice)
 
-        // Normalize phone number (strip non-numeric except optional leading plus)
         let normalizedPhone = customer.phone.replace(/[^\d+]/g, "")
         if (normalizedPhone.length === 10 && !normalizedPhone.startsWith('+')) {
           normalizedPhone = `+1${normalizedPhone}`
@@ -134,7 +139,6 @@ serve(async (req) => {
           normalizedPhone = `+${normalizedPhone}`
         }
 
-        // Send via Twilio
         const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`
         const formData = new URLSearchParams()
         formData.append('To', normalizedPhone)
@@ -142,7 +146,7 @@ serve(async (req) => {
         formData.append('Body', content)
 
         try {
-          const twilioResponse = await fetch(twilioUrl, {
+          const res = await fetch(twilioUrl, {
             method: 'POST',
             headers: {
               'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
@@ -151,61 +155,61 @@ serve(async (req) => {
             body: formData.toString()
           })
 
-          const twilioData = await twilioResponse.json()
-
-          if (twilioResponse.ok) {
+          const data = await res.json()
+          if (res.ok) {
             successCount++
-            // Log SMS messages sent in sms_messages table
-            await supabaseClient
-              .from('sms_messages')
-              .insert({
-                customer_id: customer.id,
-                message_type: 'marketing',
-                content,
-                status: 'sent',
-                provider_message_id: twilioData.sid,
-                campaign_id: campHist.id
-              })
+            smsLogBuffer.push({
+              customer_id: customer.id,
+              message_type: 'marketing',
+              content,
+              status: 'sent',
+              provider_message_id: data.sid,
+              campaign_id: campHist.id
+            })
           } else {
             failCount++
-            const errorMessage = twilioData.message || "Unknown Twilio error"
-            await supabaseClient
-              .from('sms_messages')
-              .insert({
-                customer_id: customer.id,
-                message_type: 'marketing',
-                content,
-                status: 'failed',
-                error_message: errorMessage,
-                campaign_id: campHist.id
-              })
-          }
-        } catch (smsErr) {
-          console.error(`Exception sending SMS to customer ${customer.id} in campaign ${campaign.id}:`, smsErr)
-          failCount++
-          await supabaseClient
-            .from('sms_messages')
-            .insert({
+            smsLogBuffer.push({
               customer_id: customer.id,
               message_type: 'marketing',
               content,
               status: 'failed',
-              error_message: String(smsErr),
+              error_message: data.message || "Unknown Twilio error",
               campaign_id: campHist.id
             })
+          }
+        } catch (smsErr) {
+          failCount++
+          smsLogBuffer.push({
+            customer_id: customer.id,
+            message_type: 'marketing',
+            content,
+            status: 'failed',
+            error_message: String(smsErr),
+            campaign_id: campHist.id
+          })
         }
-
-        // 1-second delay between Twilio calls
-        await new Promise(r => setTimeout(r, 1000))
       }
 
-      // Update marketing_campaigns final success sends
+      // Process in concurrent batches of 15
+      const BATCH_SIZE = 15
+      for (let i = 0; i < customers.length; i += BATCH_SIZE) {
+        const batch = customers.slice(i, i + BATCH_SIZE)
+        await Promise.all(batch.map(c => sendSingleSms(c)))
+        await new Promise(r => setTimeout(r, 10))
+      }
+
+      // Batch insert SMS logs in chunks of 500
+      for (let i = 0; i < smsLogBuffer.length; i += 500) {
+        const chunk = smsLogBuffer.slice(i, i + 500)
+        await supabaseClient.from('sms_messages').insert(chunk)
+      }
+
+      // Update final stats
       await supabaseClient
         .from('marketing_campaigns')
         .update({ successful_sends: successCount })
         .eq('id', campHist.id)
 
-      // Update scheduled_campaigns status to 'completed'
       await supabaseClient
         .from('scheduled_campaigns')
         .update({

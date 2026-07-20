@@ -27,6 +27,11 @@ ON public.marketing_campaigns FOR INSERT
 TO authenticated, anon 
 WITH CHECK (true);
 
+CREATE POLICY "Allow update access to marketing campaigns" 
+ON public.marketing_campaigns FOR UPDATE 
+TO authenticated, anon 
+USING (true);
+
 -- Create the scheduled campaigns table
 CREATE TABLE IF NOT EXISTS public.scheduled_campaigns (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

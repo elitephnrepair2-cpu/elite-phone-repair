@@ -27,13 +27,13 @@ export const evaluateSmsRouting = (
     activeTicketsCount: activeTickets?.length,
   });
 
-  const hasActiveTicket = activeTickets.some(t => !t.is_paid); // Logic: Unpaid tickets are active
+  const hasActiveTicket = activeTickets.length > 0;
   
-  // Rule 1: Transactional Logic (Consent OR Active Relationship)
-  const canSendTransactional = !!customer.transactional_sms_consent || hasActiveTicket;
+  // Rule 1: Transactional Logic (Granted unless customer explicitly revoked consent)
+  const canSendTransactional = customer?.transactional_sms_consent !== false || hasActiveTicket;
   
   // Rule 2: Marketing Logic (Strict Consent Only)
-  const canSendMarketing = !!customer.marketing_sms_consent;
+  const canSendMarketing = !!customer?.marketing_sms_consent;
 
   if (messageType === 'transactional') {
     if (canSendTransactional) {
@@ -41,7 +41,7 @@ export const evaluateSmsRouting = (
     }
     return { 
       shouldSend: false, 
-      reason: 'No transactional consent and no active repair tickets found. Transactional messages require an active service relationship or explicit consent.' 
+      reason: 'Transactional messages are disabled for this customer because they explicitly opted out.' 
     };
   }
 

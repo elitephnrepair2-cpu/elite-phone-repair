@@ -18,6 +18,7 @@ import TodayTicketsList from './components/TodayTicketsList';
 import PartsDashboard from './components/PartsDashboard';
 import InstantQuoteWidget from './components/InstantQuoteWidget';
 import CampaignsView from './components/CampaignsView';
+import { FrontDeskPortal } from './components/FrontDeskPortal';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { REPAIR_PRICES } from './constants/prices';
 import { sendSmsIfAllowed } from './services/smsService';
@@ -95,55 +96,73 @@ const App: React.FC = () => {
 
   const fetchData = useCallback(async () => {
     try {
-      let allCustomers: Customer[] = [];
-      let page = 0;
-      let hasMore = true;
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('customers')
+      const fetchCustomers = async () => {
+        let all: Customer[] = [];
+        let p = 0;
+        let more = true;
+        while (more) {
+          const { data, error } = await supabase
+            .from('customers')
+            .select('*')
+            .eq('location', currentLocation)
+            .order('created_at', { ascending: false })
+            .range(p * 1000, (p + 1) * 1000 - 1);
+          if (error || !data) break;
+          all = [...all, ...data];
+          if (data.length < 1000) more = false;
+          p++;
+        }
+        return all;
+      };
+
+      const fetchTickets = async () => {
+        let all: RepairTicket[] = [];
+        let p = 0;
+        let more = true;
+        while (more) {
+          const { data, error } = await supabase
+            .from('tickets')
+            .select('*, customer:customers(*)')
+            .eq('location', currentLocation)
+            .order('created_at', { ascending: false })
+            .range(p * 1000, (p + 1) * 1000 - 1);
+          if (error || !data) break;
+          all = [...all, ...data as any];
+          if (data.length < 1000) more = false;
+          p++;
+        }
+        return all;
+      };
+
+      const fetchAppointments = async () => {
+        const { data } = await supabase
+          .from('appointments')
           .select('*')
           .eq('location', currentLocation)
-          .order('created_at', { ascending: false })
-          .range(page * 1000, (page + 1) * 1000 - 1);
-        if (error || !data) break;
-        allCustomers = [...allCustomers, ...data];
-        if (data.length < 1000) hasMore = false;
-        page++;
-      }
-      setCustomers(allCustomers);
+          .order('date', { ascending: true });
+        return data || [];
+      };
 
-      let allTickets: RepairTicket[] = [];
-      page = 0;
-      hasMore = true;
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('tickets')
-          .select('*, customer:customers(*)')
+      const fetchParts = async () => {
+        const { data } = await supabase
+          .from('parts_orders')
+          .select('*')
           .eq('location', currentLocation)
-          .order('created_at', { ascending: false })
-          .range(page * 1000, (page + 1) * 1000 - 1);
-        if (error || !data) break;
-        allTickets = [...allTickets, ...data as any];
-        if (data.length < 1000) hasMore = false;
-        page++;
-      }
-      setTickets(allTickets as any);
+          .order('created_at', { ascending: false });
+        return data || [];
+      };
 
-      const { data: appointmentData, error: appointmentError } = await supabase
-        .from('appointments')
-        .select('*')
-        .eq('location', currentLocation)
-        .order('date', { ascending: true });
-      if (appointmentError) console.error("Appointment fetch error:", appointmentError);
-      if (appointmentData) setAppointments(appointmentData);
+      const [custs, tix, appts, parts] = await Promise.all([
+        fetchCustomers(),
+        fetchTickets(),
+        fetchAppointments(),
+        fetchParts()
+      ]);
 
-      const { data: partsData, error: partsError } = await supabase
-        .from('parts_orders')
-        .select('*')
-        .eq('location', currentLocation)
-        .order('created_at', { ascending: false });
-      if (partsError) console.error("Parts fetch error:", partsError);
-      if (partsData) setPartsOrders(partsData);
+      setCustomers(custs);
+      setTickets(tix as any);
+      setAppointments(appts);
+      setPartsOrders(parts);
     } catch (e) {
       console.error("Data fetch error:", e);
     }
@@ -472,147 +491,69 @@ const App: React.FC = () => {
     switch (view) {
       case 'dashboard':
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-1">
-              <CustomerList
-                customers={customers}
-                selectedCustomerId={selectedCustomerId || undefined}
-                onSelectCustomer={(c) => setSelectedCustomerId(c.id)}
-                onAddNew={() => {
-                  setCustomerToEdit(null);
-                  setView('add_customer');
-                }}
-                onImportData={() => { }}
-                onExportData={() => { }}
-                onDeleteCustomer={(id) => {
-                  showConfirm("Delete this customer and all their associated records?", async () => {
-                    await supabase.from('sms_consent_events').delete().eq('customer_id', id);
-                    await supabase.from('tickets').delete().eq('customer_id', id);
-                    const { error } = await supabase.from('customers').delete().eq('id', id);
-                    if (error) {
-                      showAlert("Error deleting customer: " + error.message);
-                    } else {
-                      showAlert("Customer deleted successfully.");
-                    }
-                    fetchData();
-                  });
-                }}
-              />
+          <FrontDeskPortal
+            customers={customers}
+            tickets={tickets}
+            currentLocation={currentLocation}
+            selectedCustomerId={selectedCustomerId}
+            onSelectCustomer={(cust) => setSelectedCustomerId(cust ? cust.id : null)}
+            onSaveCustomer={async (custData) => {
+              const created = await handleSaveCustomer(custData);
+              if (created && created.id) {
+                setSelectedCustomerId(created.id);
+              }
+            }}
+            onStartNewTicket={(cust) => {
+              setSelectedCustomerId(cust.id);
+              setView('new_ticket');
+            }}
+            onViewTicket={(ticket) => {
+              setActiveTicket(ticket);
+              setView('view_ticket');
+            }}
+            onUpdateTicketStatus={handleUpdateTicketStatus}
+            onMarkAsPaid={handleMarkAsPaid}
+            onOpenSMSInbox={() => setView('campaigns')}
+            onOpenKanban={() => setView('kanban')}
+            onOpenTodayList={() => setView('dashboard_list')}
+            onEditCustomer={(cust) => {
+              setCustomerToEdit(cust);
+              setView('edit_customer');
+            }}
+          />
+        );
+      case 'kanban':
+        return (
+          <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 space-y-4">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-200">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800">Shop Ticket Kanban Board</h2>
+                <p className="text-xs text-slate-500">Drag and drop tickets across status columns</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setView('dashboard')}
+                  className="px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-red-700 transition-colors"
+                >
+                  ← Back to Front Desk Portal
+                </button>
+                <button
+                  onClick={() => setView('dashboard_list')}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
+                >
+                  Today's List
+                </button>
+              </div>
             </div>
-            <div className="lg:col-span-2 space-y-6">
-              {selectedCustomer ? (
-                <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 animate-in fade-in slide-in-from-bottom-4">
-                  <div className="flex justify-between items-start mb-6">
-                    <div>
-                      <h2 className="text-3xl font-bold text-slate-800">{selectedCustomer.name}</h2>
-                      <p className="text-slate-500">{selectedCustomer.phone}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="flex flex-col items-end gap-1">
-                        <button
-                          onClick={handleTestEdgeSms}
-                          className="bg-amber-100 text-amber-700 px-3 py-1 rounded-lg text-xs font-bold hover:bg-amber-200 border border-amber-200"
-                        >
-                          Test Edge SMS
-                        </button>
-                        {edgeSmsStatus && (
-                          <span className={`text-[10px] font-bold uppercase ${edgeSmsStatus === 'Sending...' ? 'text-slate-500' :
-                            edgeSmsStatus === 'Success' ? 'text-green-600' : 'text-red-600'
-                            }`}>
-                            {edgeSmsStatus}
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => {
-                          setCustomerToEdit(selectedCustomer);
-                          setView('edit_customer');
-                        }}
-                        className="bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-bold hover:bg-slate-200"
-                      >
-                        Edit Profile
-                      </button>
-                      <button
-                        onClick={() => setView('new_ticket')}
-                        className="bg-red-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-red-700 shadow-md"
-                      >
-                        New Ticket
-                      </button>
-                    </div>
-                  </div>
-
-                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                    </svg>
-                    Repair History
-                  </h3>
-                  <div className="space-y-3">
-                    {tickets.filter(t => t.customer_id === selectedCustomer.id).map(ticket => (
-                      <div
-                        key={ticket.id}
-                        onClick={() => {
-                          setActiveTicket(ticket as any);
-                          setView('view_ticket');
-                        }}
-                        className="flex justify-between items-center p-4 bg-slate-50 rounded-xl hover:bg-slate-100 cursor-pointer border border-transparent hover:border-slate-200 transition-all"
-                      >
-                        <div>
-                          <p className="font-bold text-slate-800">{ticket.device}</p>
-                          <p className="text-sm text-slate-500">{new Date(ticket.created_at).toLocaleDateString()}</p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <span className={`px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold mr-2 border border-slate-200`}>
-                            {ticket.status || 'In Queue'}
-                          </span>
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${ticket.is_paid ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                            {ticket.is_paid ? 'Paid' : 'Unpaid'}
-                          </span>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </div>
-                      </div>
-                    ))}
-                    {tickets.filter(t => t.customer_id === selectedCustomer.id).length === 0 && (
-                      <p className="text-slate-400 italic py-4">No repair history found.</p>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-200">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-slate-800">Shop Dashboard</h2>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setView('dashboard')}
-                        className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-bold shadow-sm"
-                      >
-                        Kanban View
-                      </button>
-                      <button
-                        onClick={() => setView('dashboard_list')}
-                        className="px-4 py-2 bg-slate-50 text-slate-500 rounded-lg text-sm font-medium hover:bg-slate-100"
-                      >
-                        Today's List
-                      </button>
-                    </div>
-                  </div>
-                  <div className="mb-4">
-                    <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full font-bold text-sm">Total Active: {tickets.filter(t => (t.status || 'In Queue') !== 'Completed').length}</span>
-                  </div>
-                  <KanbanBoard
-                    tickets={tickets as any}
-                    onTicketStatusChange={handleUpdateTicketStatus}
-                    onTicketClick={(ticket) => {
-                      setActiveTicket(ticket);
-                      setView('view_ticket');
-                    }}
-                    onTogglePaid={handleMarkAsPaid}
-                  />
-                </div>
-              )}
-            </div>
+            <KanbanBoard
+              tickets={tickets as any}
+              onTicketStatusChange={handleUpdateTicketStatus}
+              onTicketClick={(ticket) => {
+                setActiveTicket(ticket);
+                setView('view_ticket');
+              }}
+              onTogglePaid={handleMarkAsPaid}
+            />
           </div>
         );
       case 'dashboard_list':
@@ -747,6 +688,21 @@ const App: React.FC = () => {
           onBack={() => setView('dashboard')}
           showAlert={showAlert}
           showConfirm={showConfirm}
+          onViewCustomer={(id) => {
+            setSelectedCustomerId(id);
+            setView('view_customer' as View);
+          }}
+        />;
+      case 'messages':
+        return <SMSInboxView
+          customers={customers}
+          tickets={tickets}
+          currentLocation={currentLocation}
+          onViewCustomer={(id) => {
+            setSelectedCustomerId(id);
+            setView('view_customer' as View);
+          }}
+          showAlert={showAlert}
         />;
       default:
         return <div className="p-8 text-center text-slate-500">View implementation coming soon...</div>;
@@ -764,6 +720,7 @@ const App: React.FC = () => {
           onGoToParts={() => setView('parts_dashboard')}
           onGoToSettings={() => setView('settings')}
           onGoToCampaigns={() => setView('campaigns')}
+          onGoToMessages={() => setView('messages')}
           currentLocation={currentLocation}
           onLocationChange={setCurrentLocation}
           businessName={settings.businessName}

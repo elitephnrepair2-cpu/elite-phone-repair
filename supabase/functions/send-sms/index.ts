@@ -18,55 +18,60 @@ serve(async (req) => {
     const supabaseClient = createClient(supabaseUrl, supabaseServiceKey)
 
     const body = await req.json()
-    const { customer_id, message_type, content, ticket_id, campaign_id } = body
+    const { customer_id, to_phone, message_type = 'transactional', content, ticket_id, campaign_id } = body
 
-    if (!customer_id || !message_type || !content) {
-      throw new Error("Missing required fields: customer_id, message_type, content")
+    if ((!customer_id && !to_phone) || !content) {
+      throw new Error("Missing required fields: customer_id or to_phone, and content")
     }
 
-    // 1. Fetch customer data
-    const { data: customer, error: customerError } = await supabaseClient
-      .from('customers')
-      .select('*')
-      .eq('id', customer_id)
-      .single()
+    let customer: any = null
+    let rawDigits = ""
 
-    if (customerError || !customer) {
-      throw new Error(`Customer not found: ${customerError?.message || 'Unknown error'}`)
+    if (customer_id) {
+      const { data: cust } = await supabaseClient
+        .from('customers')
+        .select('*')
+        .eq('id', customer_id)
+        .maybeSingle()
+      customer = cust
+      if (customer?.phone) {
+        rawDigits = customer.phone.replace(/\D/g, '')
+      }
     }
 
-    // 2. Phone normalization
-    const rawPhone = customer.phone || ""
-    let normalizedPhone = rawPhone.replace(/\D/g, '')
-    
-    if (normalizedPhone.length === 10) {
-      normalizedPhone = `+1${normalizedPhone}`
-    } else if (normalizedPhone.length === 11 && normalizedPhone.startsWith('1')) {
-      normalizedPhone = `+${normalizedPhone}`
+    if (!rawDigits && to_phone) {
+      rawDigits = to_phone.replace(/\D/g, '')
+    }
+
+    let normalizedPhone = ""
+    if (rawDigits.length === 10) {
+      normalizedPhone = `+1${rawDigits}`
+    } else if (rawDigits.length === 11 && rawDigits.startsWith('1')) {
+      normalizedPhone = `+${rawDigits}`
+    } else if (rawDigits.length > 0) {
+      normalizedPhone = `+${rawDigits}`
     } else {
-      throw new Error(`Invalid phone number format for customer ${customer_id}: ${rawPhone}`)
+      throw new Error(`Invalid phone number for request`)
     }
 
     // 3. Evaluate Consent
     let allowed = false
     let reason = ""
 
-    if (message_type === 'transactional') {
-      // transactional: allow if transactional_sms_consent = true OR ticket_id is not null
-      if (customer.transactional_sms_consent === true || ticket_id) {
+    if (to_phone && !customer_id) {
+      allowed = true
+    } else if (customer) {
+      if (message_type === 'transactional') {
         allowed = true
-      } else {
-        reason = "No transactional consent and no active ticket ID provided."
-      }
-    } else if (message_type === 'marketing') {
-      // marketing: allow ONLY if marketing_sms_consent = true
-      if (customer.marketing_sms_consent === true) {
-        allowed = true
-      } else {
-        reason = "Marketing consent not granted."
+      } else if (message_type === 'marketing') {
+        if (customer.marketing_sms_consent === true) {
+          allowed = true
+        } else {
+          reason = "Marketing consent not granted."
+        }
       }
     } else {
-      throw new Error(`Invalid message_type: ${message_type}`)
+      allowed = true
     }
 
     // 4. Handle Skipped Status
