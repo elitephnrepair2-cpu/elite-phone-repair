@@ -109,14 +109,19 @@ export const sendSmsViaEdgeFunction = async (payload: {
 
     if (error) {
       console.error("EDGE FUNCTION FAILED:", error);
-      return { success: false, error };
+      return { success: false, error: error.message || error };
+    }
+
+    if (data && (data.ok === false || data.status === 'failed' || data.status === 'skipped')) {
+      console.warn("SMS SENDING SKIPPED OR FAILED:", data.reason || data.error);
+      return { success: false, status: data.status, reason: data.reason || data.error, data };
     }
 
     console.log("EDGE FUNCTION SUCCEEDED:", data);
     return { success: true, data };
-  } catch (err) {
+  } catch (err: any) {
     console.error("EDGE FUNCTION EXCEPTION:", err);
-    return { success: false, error: err };
+    return { success: false, error: err?.message || err };
   }
 };
 

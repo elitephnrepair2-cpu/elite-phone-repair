@@ -85,15 +85,22 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
       } else if (camps && camps.length > 0) {
         const updatedCamps = await Promise.all(
           camps.map(async (camp) => {
-            const { count } = await supabase
+            const { count: sentCount } = await supabase
               .from('sms_messages')
               .select('*', { count: 'exact', head: true })
               .eq('campaign_id', camp.id)
               .eq('status', 'sent');
 
-            const realSends = (count !== null && count > 0) ? count : camp.successful_sends;
-            
-            if (camp.successful_sends === 0 && realSends > 0) {
+            const { count: failedCount } = await supabase
+              .from('sms_messages')
+              .select('*', { count: 'exact', head: true })
+              .eq('campaign_id', camp.id)
+              .eq('status', 'failed');
+
+            const realSends = sentCount !== null ? sentCount : camp.successful_sends;
+            const realFails = failedCount !== null ? failedCount : 0;
+
+            if (camp.successful_sends !== realSends) {
               supabase
                 .from('marketing_campaigns')
                 .update({ successful_sends: realSends })
@@ -103,7 +110,8 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
 
             return {
               ...camp,
-              successful_sends: realSends
+              successful_sends: realSends,
+              failed_sends: realFails
             };
           })
         );
@@ -370,7 +378,7 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
                   campaign_id: campaignId
                 });
 
-                if (res.success) {
+                if (res.success && (res as any).data?.ok !== false && (res as any).data?.status !== 'failed' && (res as any).data?.status !== 'skipped') {
                   successCount++;
                 } else {
                   failCount++;
@@ -796,9 +804,16 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
                     <p className="text-xs text-slate-600 line-clamp-2 italic font-medium">"{camp.message_body}"</p>
                     <div className="flex justify-between items-center text-[11px] text-slate-500 pt-1 border-t border-slate-200/60 font-semibold">
                       <span>{new Date(camp.created_at).toLocaleDateString()}</span>
-                      <span className="text-green-600 font-bold">
-                        {camp.successful_sends} / {camp.total_recipients} Delivered
-                      </span>
+                      <div className="flex flex-col items-end">
+                        <span className="text-emerald-600 font-extrabold">
+                          ✓ {camp.successful_sends} / {camp.total_recipients} Delivered
+                        </span>
+                        {((camp as any).failed_sends > 0 || (camp.total_recipients > camp.successful_sends)) && (
+                          <span className="text-rose-600 font-bold text-[10px]">
+                            ⚠️ {((camp as any).failed_sends || Math.max(0, camp.total_recipients - camp.successful_sends))} Failed / Missed
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))
