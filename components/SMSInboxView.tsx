@@ -29,41 +29,55 @@ export const SMSInboxView: React.FC<SMSInboxViewProps> = ({
   const [replyText, setReplyText] = useState<string>('');
   const [isSendingReply, setIsSendingReply] = useState<boolean>(false);
 
-  // Fetch all SMS logs from Supabase
-  const fetchMessages = async () => {
-    setIsLoading(true);
+  // Fetch all SMS logs from Supabase without 1000 row truncation limit
+  const fetchMessages = async (isInitial = false) => {
+    if (isInitial) setIsLoading(true);
     try {
-      const { data, error } = await (supabase as any)
-        .from('sms_messages')
-        .select('*')
-        .order('created_at', { ascending: true });
+      let allLogs: SmsLog[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
 
-      if (error) {
-        console.error("Error fetching SMS logs:", error);
-      } else {
-        setMessages(data || []);
+      while (hasMore) {
+        const { data, error } = await (supabase as any)
+          .from('sms_messages')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (error || !data || data.length === 0) {
+          hasMore = false;
+        } else {
+          allLogs = allLogs.concat(data);
+          if (data.length < pageSize) hasMore = false;
+          else page++;
+        }
       }
+
+      // Re-sort ascending for conversation thread timeline ordering
+      allLogs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      setMessages(allLogs);
     } catch (err) {
-      console.error(err);
+      console.error("Error fetching SMS logs:", err);
     } finally {
-      setIsLoading(false);
+      if (isInitial) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchMessages();
+    fetchMessages(true);
 
     // Subscribe to realtime changes on sms_messages table
     const smsChannel = supabase
       .channel('sms-inbox-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sms_messages' }, () => {
-        fetchMessages();
+        fetchMessages(false);
       })
       .subscribe();
 
     // Fallback polling interval every 5 seconds to ensure instant delivery
     const pollInterval = setInterval(() => {
-      fetchMessages();
+      fetchMessages(false);
     }, 5000);
 
     return () => {
