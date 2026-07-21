@@ -265,13 +265,30 @@ export const SMSInboxView: React.FC<SMSInboxViewProps> = ({
 
     setIsSendingReply(true);
     try {
-      const targetCustomerId = activeConversation.customer?.id || null;
-      const targetPhone = activeConversation.displayPhone;
+      const targetCustomerId = activeConversation.customer?.id || activeConversation.customerId || null;
+
+      // Extract raw phone number digits from customer, conversation phone, or message logs
+      const rawPhoneSource = activeConversation.customer?.phone
+        || activeConversation.phone
+        || activeConversation.lastMessage?.from_phone
+        || activeConversation.lastMessage?.to_phone
+        || activeConversation.displayPhone;
+
+      const cleanDigits = (rawPhoneSource || '').replace(/\D/g, '');
+      const normalizedPhone = cleanDigits.length === 11 && cleanDigits.startsWith('1')
+        ? cleanDigits.slice(1)
+        : cleanDigits;
+
+      if (!normalizedPhone || normalizedPhone.length < 10) {
+        showAlert("Cannot reply: Invalid or missing recipient phone number.");
+        setIsSendingReply(false);
+        return;
+      }
 
       const { data, error } = await supabase.functions.invoke('send-sms', {
         body: {
           customer_id: targetCustomerId,
-          to_phone: targetPhone,
+          to_phone: normalizedPhone,
           message_type: 'transactional',
           content: replyText.trim()
         }
@@ -281,7 +298,7 @@ export const SMSInboxView: React.FC<SMSInboxViewProps> = ({
         showAlert(`Failed to send SMS reply: ${error?.message || data?.reason || 'Unknown error'}`);
       } else {
         setReplyText('');
-        fetchMessages();
+        fetchMessages(false);
       }
     } catch (err: any) {
       console.error("Reply error:", err);

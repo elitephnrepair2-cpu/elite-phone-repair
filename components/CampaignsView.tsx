@@ -43,6 +43,7 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
   const [selectedExcludeCampaignId, setSelectedExcludeCampaignId] = useState<string>('');
   const [recipientLimit, setRecipientLimit] = useState<string>('');
   const [messagedCustomerIds, setMessagedCustomerIds] = useState<Set<string>>(new Set());
+  const [messagedPhones, setMessagedPhones] = useState<Set<string>>(new Set());
   const [campaignCustomerMap, setCampaignCustomerMap] = useState<Map<string, Set<string>>>(new Map());
   const [showSegmentDetailsModal, setShowSegmentDetailsModal] = useState<boolean>(false);
   const [showTwilioDeliveryModal, setShowTwilioDeliveryModal] = useState<boolean>(false);
@@ -156,37 +157,64 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
     }
   };
 
-  // Fetch messaged log stats to enable duplicate protection and audience segmentation
+  // Fetch messaged log stats across all pages to guarantee duplicate protection
   const fetchMessagedLogStats = async () => {
     try {
-      const { data: logs } = await supabase
-        .from('sms_messages')
-        .select('customer_id, campaign_id, status')
-        .eq('direction', 'outbound');
+      let allLogs: any[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
 
-      if (logs) {
-        const set = new Set<string>();
-        const campMap = new Map<string, Set<string>>();
+      while (hasMore) {
+        const { data: logs, error } = await (supabase as any)
+          .from('sms_messages')
+          .select('customer_id, campaign_id, status, to_phone, from_phone')
+          .eq('direction', 'outbound')
+          .range(page * pageSize, (page + 1) * pageSize - 1);
 
-        logs.forEach(l => {
+        if (error || !logs || logs.length === 0) {
+          hasMore = false;
+        } else {
+          allLogs = allLogs.concat(logs);
+          if (logs.length < pageSize) hasMore = false;
+          else page++;
+        }
+      }
+
+      const idSet = new Set<string>();
+      const phoneSet = new Set<string>();
+      const campMap = new Map<string, Set<string>>();
+
+      allLogs.forEach(l => {
+        if (l.status !== 'failed') {
           if (l.customer_id) {
-            // Only count as messaged if the send attempt did not fail
-            if (l.status !== 'failed') {
-              set.add(l.customer_id);
-            }
+            idSet.add(l.customer_id);
+          }
 
-            if (l.campaign_id && l.status !== 'failed') {
-              if (!campMap.has(l.campaign_id)) {
-                campMap.set(l.campaign_id, new Set());
-              }
-              campMap.get(l.campaign_id)!.add(l.customer_id);
+          const rawPhone = l.to_phone || l.from_phone || '';
+          if (rawPhone) {
+            const digits = rawPhone.replace(/\D/g, '');
+            const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+            if (norm && norm.length === 10) {
+              phoneSet.add(norm);
             }
           }
-        });
 
-        setMessagedCustomerIds(set);
-        setCampaignCustomerMap(campMap);
-      }
+          if (l.campaign_id) {
+            if (!campMap.has(l.campaign_id)) {
+              campMap.set(l.campaign_id, new Set());
+            }
+            if (l.customer_id) campMap.get(l.campaign_id)!.add(l.customer_id);
+            const digits = (l.to_phone || '').replace(/\D/g, '');
+            const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+            if (norm && norm.length === 10) campMap.get(l.campaign_id)!.add(norm);
+          }
+        }
+      });
+
+      setMessagedCustomerIds(idSet);
+      setMessagedPhones(phoneSet);
+      setCampaignCustomerMap(campMap);
     } catch (e) {
       console.error("Error fetching messaged stats:", e);
     }
@@ -211,18 +239,26 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
 
   // Apply Audience Segmentation
   const segmentedCustomers = locationCustomers.filter(c => {
+    const custDigits = (c.phone || '').replace(/\D/g, '');
+    const normPhone = custDigits.length === 11 && custDigits.startsWith('1') ? custDigits.slice(1) : custDigits;
+
+    const isMessaged = messagedCustomerIds.has(c.id) || (normPhone && messagedPhones.has(normPhone));
+
     if (segmentMode === 'unmessaged_only') {
-      if (messagedCustomerIds.has(c.id)) return false;
+      if (isMessaged) return false;
     } else if (segmentMode === 'messaged_only') {
-      if (!messagedCustomerIds.has(c.id)) return false;
+      if (!isMessaged) return false;
     }
 
     if (enableExclusion && selectedExcludeCampaignId) {
       const excludedSet = campaignCustomerMap.get(selectedExcludeCampaignId);
-      if (excludedSet && excludedSet.has(c.id)) {
-        return false;
+      if (excludedSet) {
+        if (excludedSet.has(c.id) || (normPhone && excludedSet.has(normPhone))) {
+          return false;
+        }
       }
     }
+
     return true;
   });
 
