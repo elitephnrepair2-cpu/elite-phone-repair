@@ -48,6 +48,13 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
   const [showSegmentDetailsModal, setShowSegmentDetailsModal] = useState<boolean>(false);
   const [showTwilioDeliveryModal, setShowTwilioDeliveryModal] = useState<boolean>(false);
 
+  // Selected Campaign Recipient Detail Modal State
+  const [selectedHistoryCampaign, setSelectedHistoryCampaign] = useState<MarketingCampaign | null>(null);
+  const [historyCampaignLogs, setHistoryCampaignLogs] = useState<SmsLog[]>([]);
+  const [isLoadingHistoryLogs, setIsLoadingHistoryLogs] = useState<boolean>(false);
+  const [historyRecipientSearch, setHistoryRecipientSearch] = useState<string>('');
+  const [historyRecipientFilter, setHistoryRecipientFilter] = useState<'all' | 'sent' | 'failed'>('all');
+
   // Sending Process State
   const [isSending, setIsSending] = useState(false);
   const [sendingProgress, setSendingProgress] = useState({
@@ -217,6 +224,61 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
       setCampaignCustomerMap(campMap);
     } catch (e) {
       console.error("Error fetching messaged stats:", e);
+    }
+  };
+
+  // Fast Customer Map Lookup
+  const customerMap = useMemo(() => {
+    const map = new Map<string, Customer>();
+    (customers || []).forEach(c => map.set(c.id, c));
+    return map;
+  }, [customers]);
+
+  // Phone formatting helper
+  const formatPhoneNumber = (phoneStr?: string | null) => {
+    if (!phoneStr || phoneStr.trim() === '') return 'Unknown Phone';
+    const digits = phoneStr.replace(/\D/g, '');
+    const clean = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+    if (clean.length === 10) {
+      return `(${clean.slice(0, 3)}) ${clean.slice(3, 6)}-${clean.slice(6)}`;
+    }
+    return phoneStr;
+  };
+
+  // Fetch all recipient logs for a selected past campaign
+  const fetchHistoryCampaignLogs = async (campaign: MarketingCampaign) => {
+    setSelectedHistoryCampaign(campaign);
+    setIsLoadingHistoryLogs(true);
+    setHistoryRecipientSearch('');
+    setHistoryRecipientFilter('all');
+
+    try {
+      let allLogs: SmsLog[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data: logs, error } = await (supabase as any)
+          .from('sms_messages')
+          .select('*')
+          .eq('campaign_id', campaign.id)
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (error || !logs || logs.length === 0) {
+          hasMore = false;
+        } else {
+          allLogs = allLogs.concat(logs);
+          if (logs.length < pageSize) hasMore = false;
+          else page++;
+        }
+      }
+
+      setHistoryCampaignLogs(allLogs);
+    } catch (e) {
+      console.error("Error fetching campaign recipient logs:", e);
+    } finally {
+      setIsLoadingHistoryLogs(false);
     }
   };
 
@@ -832,13 +894,19 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
             {historyTab === 'sent' ? (
               campaigns.length > 0 ? (
                 campaigns.map(camp => (
-                  <div key={camp.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors space-y-1.5">
+                  <div
+                    key={camp.id}
+                    onClick={() => fetchHistoryCampaignLogs(camp)}
+                    className="p-3.5 bg-slate-50 hover:bg-indigo-50/60 rounded-xl border border-slate-200 hover:border-indigo-300 transition-all cursor-pointer space-y-2 group shadow-sm hover:shadow-md"
+                  >
                     <div className="flex justify-between items-start">
-                      <span className="font-extrabold text-slate-800 text-sm">{camp.name}</span>
+                      <span className="font-extrabold text-slate-800 text-sm group-hover:text-indigo-600 transition-colors flex items-center gap-1.5">
+                        <span>{camp.name}</span>
+                      </span>
                       <span className="text-[10px] bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded-full">{camp.location}</span>
                     </div>
                     <p className="text-xs text-slate-600 line-clamp-2 italic font-medium">"{camp.message_body}"</p>
-                    <div className="flex justify-between items-center text-[11px] text-slate-500 pt-1 border-t border-slate-200/60 font-semibold">
+                    <div className="flex justify-between items-center text-[11px] text-slate-500 pt-1.5 border-t border-slate-200/60 font-semibold">
                       <span>{new Date(camp.created_at).toLocaleDateString()}</span>
                       <div className="flex flex-col items-end">
                         <span className="text-emerald-600 font-extrabold">
@@ -850,6 +918,9 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
                           </span>
                         )}
                       </div>
+                    </div>
+                    <div className="text-[10px] text-indigo-600 font-bold flex items-center justify-end gap-1 pt-0.5 group-hover:underline">
+                      <span>👥 Click to view recipient list ({camp.total_recipients}) →</span>
                     </div>
                   </div>
                 ))
@@ -1108,6 +1179,180 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
             >
               Close Delivery Analytics
             </button>
+          </div>
+        </div>
+      )}
+      {/* Sent Campaign Recipient Detail Modal */}
+      {selectedHistoryCampaign && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 flex justify-between items-start">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    {selectedHistoryCampaign.location} Location
+                  </span>
+                  <span className="text-xs text-slate-500 font-medium">
+                    {new Date(selectedHistoryCampaign.created_at).toLocaleString()}
+                  </span>
+                </div>
+                <h3 className="text-2xl font-black text-slate-800 dark:text-white">
+                  {selectedHistoryCampaign.name}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 italic line-clamp-1">
+                  "{selectedHistoryCampaign.message_body}"
+                </p>
+              </div>
+
+              <button
+                onClick={() => setSelectedHistoryCampaign(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-2xl font-bold p-1 rounded-lg hover:bg-slate-200/60 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Filter controls & search */}
+            <div className="p-4 bg-slate-100/60 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row gap-3 items-center justify-between">
+              {/* Tabs */}
+              <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-xl gap-1 w-full sm:w-auto">
+                <button
+                  onClick={() => setHistoryRecipientFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    historyRecipientFilter === 'all'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  All Recipients ({historyCampaignLogs.length})
+                </button>
+                <button
+                  onClick={() => setHistoryRecipientFilter('sent')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    historyRecipientFilter === 'sent'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100/60'
+                  }`}
+                >
+                  ✓ Delivered ({historyCampaignLogs.filter(l => l.status === 'sent').length})
+                </button>
+                <button
+                  onClick={() => setHistoryRecipientFilter('failed')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    historyRecipientFilter === 'failed'
+                      ? 'bg-rose-600 text-white shadow-sm'
+                      : 'text-rose-700 dark:text-rose-400 hover:bg-rose-100/60'
+                  }`}
+                >
+                  ⚠️ Failed / Missed ({historyCampaignLogs.filter(l => l.status === 'failed' || l.status === 'skipped').length})
+                </button>
+              </div>
+
+              {/* Search input */}
+              <div className="w-full sm:w-64">
+                <input
+                  type="text"
+                  placeholder="Search recipient name or phone..."
+                  value={historyRecipientSearch}
+                  onChange={e => setHistoryRecipientSearch(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Recipient list */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {isLoadingHistoryLogs ? (
+                <div className="py-12 text-center space-y-3">
+                  <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  <p className="text-xs text-slate-500 font-bold">Loading recipient delivery records...</p>
+                </div>
+              ) : (
+                (() => {
+                  const filtered = historyCampaignLogs.filter(log => {
+                    if (historyRecipientFilter === 'sent' && log.status !== 'sent') return false;
+                    if (historyRecipientFilter === 'failed' && log.status === 'sent') return false;
+
+                    if (historyRecipientSearch.trim()) {
+                      const q = historyRecipientSearch.toLowerCase().replace(/\D/g, '');
+                      const nameMatch = (customerMap.get(log.customer_id || '')?.name || '').toLowerCase().includes(historyRecipientSearch.toLowerCase());
+                      const phoneMatch = (log.to_phone || log.from_phone || customerMap.get(log.customer_id || '')?.phone || '').replace(/\D/g, '').includes(q);
+                      return nameMatch || phoneMatch;
+                    }
+                    return true;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="py-12 text-center text-slate-400 font-medium italic text-xs">
+                        No recipient records match the selected filters.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="divide-y divide-slate-100 dark:divide-slate-700/60">
+                      {filtered.map(log => {
+                        const cust = log.customer_id ? customerMap.get(log.customer_id) : null;
+                        const rawPhone = log.to_phone || log.from_phone || cust?.phone || 'Unknown Phone';
+                        const formattedPhone = formatPhoneNumber(rawPhone);
+                        const isSent = log.status === 'sent';
+
+                        return (
+                          <div key={log.id} className="py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/40 px-3 rounded-xl transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-black ${
+                                isSent ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300'
+                              }`}>
+                                {isSent ? '✓' : '⚠️'}
+                              </div>
+                              <div>
+                                <span className="font-extrabold text-slate-800 dark:text-white text-sm block">
+                                  {cust?.name || 'Customer Record'}
+                                </span>
+                                <span className="text-xs text-slate-500 font-medium">
+                                  {formattedPhone}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="text-right">
+                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                isSent
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/80 dark:text-emerald-200'
+                                  : 'bg-rose-100 text-rose-800 dark:bg-rose-900/80 dark:text-rose-200'
+                              }`}>
+                                {isSent ? 'Delivered' : 'Failed / Skipped'}
+                              </span>
+                              {log.error_message && (
+                                <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium mt-0.5 max-w-xs truncate">
+                                  {log.error_message}
+                                </p>
+                              )}
+                              <span className="text-[10px] text-slate-400 block mt-0.5">
+                                {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 flex justify-between items-center text-xs text-slate-500 font-medium">
+              <span>Total campaign entries logged: {historyCampaignLogs.length}</span>
+              <button
+                onClick={() => setSelectedHistoryCampaign(null)}
+                className="bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-bold py-2 px-5 rounded-xl transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
