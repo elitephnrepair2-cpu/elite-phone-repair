@@ -52,6 +52,24 @@ export const SMSInboxView: React.FC<SMSInboxViewProps> = ({
 
   useEffect(() => {
     fetchMessages();
+
+    // Subscribe to realtime changes on sms_messages table
+    const smsChannel = supabase
+      .channel('sms-inbox-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sms_messages' }, () => {
+        fetchMessages();
+      })
+      .subscribe();
+
+    // Fallback polling interval every 5 seconds to ensure instant delivery
+    const pollInterval = setInterval(() => {
+      fetchMessages();
+    }, 5000);
+
+    return () => {
+      supabase.removeChannel(smsChannel);
+      clearInterval(pollInterval);
+    };
   }, []);
 
   // Helper to format phone number nicely

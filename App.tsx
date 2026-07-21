@@ -207,6 +207,7 @@ const App: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'parts_orders' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sms_messages' }, () => fetchData())
       .subscribe();
 
     return () => {
