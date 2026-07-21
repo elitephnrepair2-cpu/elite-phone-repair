@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { StaffUser } from '../services/authService';
 
 interface HeaderProps {
     currentView?: string;
@@ -16,6 +17,8 @@ interface HeaderProps {
     businessName: string;
     isDarkMode: boolean;
     onToggleDarkMode: () => void;
+    activeStaff?: StaffUser | null;
+    onSignOut?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,7 +36,9 @@ export const Header: React.FC<HeaderProps> = ({
     onLocationChange,
     businessName,
     isDarkMode,
-    onToggleDarkMode
+    onToggleDarkMode,
+    activeStaff,
+    onSignOut
 }) => {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
@@ -128,6 +133,28 @@ export const Header: React.FC<HeaderProps> = ({
                                 Houston
                             </button>
                         </div>
+                        {/* Staff User Badge & Sign Out */}
+                        {activeStaff && (
+                            <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-700">
+                                <div className="hidden md:flex flex-col items-end">
+                                    <span className="text-xs font-black text-slate-800 dark:text-white leading-none">
+                                        {activeStaff.name}
+                                    </span>
+                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold capitalize">
+                                        ● {activeStaff.role}
+                                    </span>
+                                </div>
+                                {onSignOut && (
+                                    <button
+                                        onClick={onSignOut}
+                                        className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-950 dark:hover:text-rose-400 transition-colors text-xs font-bold"
+                                        title="Sign Out Staff Workstation"
+                                    >
+                                        🔒 Lock
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </header>

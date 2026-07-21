@@ -23,6 +23,8 @@ import { AnalyticsView } from './components/AnalyticsView';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { REPAIR_PRICES } from './constants/prices';
 import { sendSmsIfAllowed } from './services/smsService';
+import { StaffUser, signOutStaff } from './services/authService';
+import { StaffLoginView } from './components/StaffLoginView';
 
 const DEFAULT_SETTINGS: ShopSettings = {
   businessName: 'Elite Phone Repair',
@@ -42,6 +44,14 @@ const App: React.FC = () => {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
   const [activeTicket, setActiveTicket] = useState<FullRepairTicket | null>(null);
+
+  // Staff Authentication State
+  const [activeStaff, setActiveStaff] = useLocalStorage<StaffUser | null>('elite_active_staff', {
+    id: 'pin_1234',
+    email: 'staff@elitephonerepair.com',
+    name: 'Front Desk Staff',
+    role: 'staff'
+  });
 
   // Analytics Protection State
   const [isAnalyticsUnlocked, setIsAnalyticsUnlocked] = useState<boolean>(false);
@@ -571,7 +581,7 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    // Kiosk views are full-screen and don't show the standard header/footer layout
+    // Kiosk views and public widgets are accessible without staff login
     if (view === 'kiosk') {
       return <KioskView
         onCheckIn={handleKioskCheckIn}
@@ -587,6 +597,14 @@ const App: React.FC = () => {
     }
     if (view === 'quote_widget') {
       return <InstantQuoteWidget />;
+    }
+
+    // Require staff authentication for all internal CRM workstation tools
+    if (!activeStaff) {
+      return <StaffLoginView
+        onLoginSuccess={(user) => setActiveStaff(user)}
+        businessName={settings.businessName}
+      />;
     }
     if (view === 'customers_dashboard') {
       return <CustomersTableView
@@ -828,7 +846,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col font-sans text-slate-900">
-      {view !== 'kiosk' && view !== 'kiosk_login' && view !== 'quote_widget' && (
+      {view !== 'kiosk' && view !== 'kiosk_login' && view !== 'quote_widget' && activeStaff && (
         <Header
           currentView={view}
           onLogoClick={() => setView('dashboard')}
@@ -845,6 +863,11 @@ const App: React.FC = () => {
           businessName={settings.businessName}
           isDarkMode={isDarkMode}
           onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+          activeStaff={activeStaff}
+          onSignOut={async () => {
+            await signOutStaff();
+            setActiveStaff(null);
+          }}
         />
       )}
       <main className={`flex-grow ${(view === 'kiosk' || view === 'kiosk_login') ? 'flex items-center justify-center bg-slate-900 min-h-screen' : view === 'quote_widget' ? 'min-h-screen bg-[#f4f2ee]' : 'container mx-auto px-4 py-8'}`}>
