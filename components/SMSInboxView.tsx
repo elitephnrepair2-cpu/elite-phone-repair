@@ -28,6 +28,7 @@ export const SMSInboxView: React.FC<SMSInboxViewProps> = ({
   const [selectedLocationFilter, setSelectedLocationFilter] = useState<'all' | 'Beaumont' | 'Houston'>('all');
   const [replyText, setReplyText] = useState<string>('');
   const [isSendingReply, setIsSendingReply] = useState<boolean>(false);
+  const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
 
   // Fetch all SMS logs from Supabase without 1000 row truncation limit
   const fetchMessages = async (isInitial = false) => {
@@ -442,7 +443,7 @@ export const SMSInboxView: React.FC<SMSInboxViewProps> = ({
       {/* Main Inbox Container */}
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col md:flex-row h-[700px]">
         {/* Left Panel: Conversation List */}
-        <div className="w-full md:w-80 lg:w-96 border-r border-slate-200 dark:border-slate-700 flex flex-col bg-slate-50 dark:bg-slate-800/50">
+        <div className={`w-full md:w-80 lg:w-96 border-r border-slate-200 dark:border-slate-700 flex flex-col bg-slate-50 dark:bg-slate-800/50 ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
           {/* Search & Filter Header */}
           <div className="p-3 border-b border-slate-200 dark:border-slate-700 space-y-2">
             <input
@@ -498,7 +499,10 @@ export const SMSInboxView: React.FC<SMSInboxViewProps> = ({
                 return (
                   <button
                     key={item.conversationKey}
-                    onClick={() => setSelectedCustomerId(item.conversationKey)}
+                    onClick={() => {
+                      setSelectedCustomerId(item.conversationKey);
+                      setMobileView('chat');
+                    }}
                     className={`w-full p-3 text-left transition-colors flex flex-col gap-1 ${isSelected ? 'bg-white dark:bg-slate-700 shadow-sm border-l-4 border-red-600' : 'hover:bg-slate-100 dark:hover:bg-slate-700/50'}`}
                   >
                     <div className="flex items-center justify-between">
@@ -540,12 +544,18 @@ export const SMSInboxView: React.FC<SMSInboxViewProps> = ({
         </div>
 
         {/* Right Panel: Chat Feed & Reply */}
-        <div className="flex-1 flex flex-col bg-white dark:bg-slate-900">
+        <div className={`flex-1 flex flex-col bg-white dark:bg-slate-900 ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}`}>
           {activeConversation ? (
             <>
               {/* Active Conversation Top Bar */}
-              <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800">
+              <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800">
                 <div>
+                  <button
+                    onClick={() => setMobileView('list')}
+                    className="md:hidden text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 mb-1"
+                  >
+                    ← Back to Conversation List
+                  </button>
                   <h2 className="font-bold text-slate-800 dark:text-white text-base">
                     {activeConversation.customer ? activeConversation.customer.name : activeConversation.displayPhone}
                   </h2>
