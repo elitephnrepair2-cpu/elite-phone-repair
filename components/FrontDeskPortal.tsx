@@ -177,6 +177,12 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
             
             <div className="flex flex-col gap-1.5 border-l border-white/20 pl-3 ml-1">
               <button
+                onClick={onOpenSMSInbox}
+                className="px-3 py-1 bg-amber-600/80 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-all text-left flex items-center gap-1.5 shadow-sm"
+              >
+                📢 Campaigns & Messaging
+              </button>
+              <button
                 onClick={onOpenKanban}
                 className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition-all text-left flex items-center gap-1.5"
               >
