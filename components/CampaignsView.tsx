@@ -175,7 +175,7 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
       while (hasMore) {
         const { data: logs, error } = await (supabase as any)
           .from('sms_messages')
-          .select('customer_id, campaign_id, status, to_phone, from_phone')
+          .select('customer_id, campaign_id, status')
           .eq('direction', 'outbound')
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -196,14 +196,15 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
         if (l.status !== 'failed') {
           if (l.customer_id) {
             idSet.add(l.customer_id);
-          }
 
-          const rawPhone = l.to_phone || l.from_phone || '';
-          if (rawPhone) {
-            const digits = rawPhone.replace(/\D/g, '');
-            const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
-            if (norm && norm.length === 10) {
-              phoneSet.add(norm);
+            // Look up customer phone number for phone set
+            const cust = customerMap.get(l.customer_id);
+            if (cust && cust.phone) {
+              const digits = cust.phone.replace(/\D/g, '');
+              const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+              if (norm && norm.length === 10) {
+                phoneSet.add(norm);
+              }
             }
           }
 
@@ -211,10 +212,18 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
             if (!campMap.has(l.campaign_id)) {
               campMap.set(l.campaign_id, new Set());
             }
-            if (l.customer_id) campMap.get(l.campaign_id)!.add(l.customer_id);
-            const digits = (l.to_phone || '').replace(/\D/g, '');
-            const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
-            if (norm && norm.length === 10) campMap.get(l.campaign_id)!.add(norm);
+            if (l.customer_id) {
+              campMap.get(l.campaign_id)!.add(l.customer_id);
+
+              const cust = customerMap.get(l.customer_id);
+              if (cust && cust.phone) {
+                const digits = cust.phone.replace(/\D/g, '');
+                const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+                if (norm && norm.length === 10) {
+                  campMap.get(l.campaign_id)!.add(norm);
+                }
+              }
+            }
           }
         }
       });
