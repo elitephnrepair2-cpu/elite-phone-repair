@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import type { Quote } from '../types';
+import { formatPhoneInput, isValidPhoneNumber } from '../services/phoneValidator';
 
 interface QuoteFormProps {
   onSaved: (quote: Quote) => void;
@@ -64,10 +65,13 @@ const QuoteForm: React.FC<QuoteFormProps> = ({ onSaved, onCancel, initialData, c
       });
     }
   }, [initialData]);
-
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    if (name === 'phone') {
+      setForm((prev) => ({ ...prev, [name]: formatPhoneInput(value) }));
+    } else {
+      setForm((prev) => ({ ...prev, [name]: value }));
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -75,9 +79,15 @@ const QuoteForm: React.FC<QuoteFormProps> = ({ onSaved, onCancel, initialData, c
     setLoading(true);
     setMessage(null);
 
+    if (form.phone && !isValidPhoneNumber(form.phone)) {
+      alert("Please enter a valid 10-digit Phone Number.");
+      setLoading(false);
+      return;
+    }
+
     const payload = {
       customer_name: form.customer_name || null,
-      phone: form.phone || null,
+      phone: form.phone ? formatPhoneInput(form.phone) : null,
       email: form.email || null,
       brand: form.brand || null,
       model: form.model || null,

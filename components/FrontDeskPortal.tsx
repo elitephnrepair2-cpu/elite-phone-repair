@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useDeferredValue } from 'react';
 import type { Customer, RepairTicket, FullRepairTicket } from '../types';
+import { formatPhoneInput, isValidPhoneNumber } from '../services/phoneValidator';
 
 interface FrontDeskPortalProps {
   customers: Customer[];
@@ -118,11 +119,16 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
       return;
     }
 
+    if (!isValidPhoneNumber(newCustPhone)) {
+      alert("Please enter a valid 10-digit Phone Number.");
+      return;
+    }
+
     setIsSubmittingCust(true);
     try {
       await onSaveCustomer({
         name: newCustName.trim(),
-        phone: newCustPhone.trim(),
+        phone: formatPhoneInput(newCustPhone),
         email: newCustEmail.trim() || undefined,
         location: newCustLocation as any,
         marketing_sms_consent: newCustConsent,
@@ -524,7 +530,7 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
                       type="tel"
                       placeholder="(409) 555-0199"
                       value={newCustPhone}
-                      onChange={e => setNewCustPhone(e.target.value)}
+                      onChange={e => setNewCustPhone(formatPhoneInput(e.target.value))}
                       required
                       className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl font-bold text-sm focus:ring-2 focus:ring-red-500 outline-none dark:text-white font-mono"
                     />
@@ -621,7 +627,7 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
                   type="tel"
                   placeholder="(409) 555-0199"
                   value={newCustPhone}
-                  onChange={e => setNewCustPhone(e.target.value)}
+                  onChange={e => setNewCustPhone(formatPhoneInput(e.target.value))}
                   required
                   className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl font-bold text-sm focus:ring-2 focus:ring-red-500 outline-none dark:text-white font-mono"
                 />

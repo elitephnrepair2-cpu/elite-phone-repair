@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import type { Customer } from '../types';
+import { formatPhoneInput, isValidPhoneNumber } from '../services/phoneValidator';
 
 interface CustomerFormProps {
   // FIX: Updated the type to not require `created_at` and be compatible with both create and update handlers.
@@ -22,8 +23,8 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ onSave, onCancel, initialDa
   useEffect(() => {
     if (initialData) {
       setName(initialData.name);
-      setPhone(initialData.phone);
-      setAltPhone(initialData.alt_phone || '');
+      setPhone(formatPhoneInput(initialData.phone));
+      setAltPhone(initialData.alt_phone ? formatPhoneInput(initialData.alt_phone) : '');
       setEmail(initialData.email || '');
       setTransactionalConsent(!!initialData.transactional_sms_consent);
       setPromotionalConsent(!!initialData.marketing_sms_consent);
@@ -34,6 +35,16 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ onSave, onCancel, initialDa
     e.preventDefault();
     if (!name || !phone) {
       alert("Name and Phone are required.");
+      return;
+    }
+
+    if (!isValidPhoneNumber(phone)) {
+      alert("Please enter a valid 10-digit Phone Number.");
+      return;
+    }
+
+    if (alt_phone && !isValidPhoneNumber(alt_phone)) {
+      alert("Please enter a valid 10-digit Alternate Phone Number.");
       return;
     }
 
@@ -48,8 +59,8 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ onSave, onCancel, initialDa
 
     onSave({
       name,
-      phone,
-      alt_phone,
+      phone: formatPhoneInput(phone),
+      alt_phone: alt_phone ? formatPhoneInput(alt_phone) : null,
       email,
       marketing_sms_consent: promotionalConsent,
       transactional_sms_consent: transactionalConsent,
@@ -82,7 +93,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ onSave, onCancel, initialDa
               id="phone"
               type="tel"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
               className="w-full px-3 py-2 bg-white text-slate-900 border border-slate-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
               required
             />
@@ -93,7 +104,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ onSave, onCancel, initialDa
               id="alt_phone"
               type="tel"
               value={alt_phone}
-              onChange={(e) => setAltPhone(e.target.value)}
+              onChange={(e) => setAltPhone(formatPhoneInput(e.target.value))}
               className="w-full px-3 py-2 bg-white text-slate-900 border border-slate-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
             />
           </div>

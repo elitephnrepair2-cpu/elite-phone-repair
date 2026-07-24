@@ -1,7 +1,7 @@
-
 import React, { useState } from 'react';
 import { DEVICE_CATALOG } from '../constants/devices';
 import { REPAIR_CATEGORIES } from '../constants/prices';
+import { formatPhoneInput, isValidPhoneNumber } from '../services/phoneValidator';
 
 interface KioskViewProps {
   onCheckIn: (data: {
@@ -64,6 +64,16 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
       return;
     }
 
+    if (!isValidPhoneNumber(phone)) {
+      alert("Please enter a valid 10-digit Phone Number.");
+      return;
+    }
+
+    if (callBackNumber && !isValidPhoneNumber(callBackNumber)) {
+      alert("Please enter a valid 10-digit Call Back Phone Number.");
+      return;
+    }
+
     if (!transactionalConsent) {
       alert("You must agree to receive service-related messages to continue.");
       return;
@@ -82,16 +92,17 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
         console.warn("Could not capture IP address:", err);
       }
 
+
       const success = await onCheckIn({
         name,
-        phone,
+        phone: formatPhoneInput(phone),
         email,
         deviceBrand: deviceBrand || 'Other',
         deviceModel: deviceModel || otherDevice,
         device: finalDevice,
         repairCategory,
         problemDescription: finalProblemDescription,
-        callBackNumber,
+        callBackNumber: callBackNumber ? formatPhoneInput(callBackNumber) : '',
         heardFrom,
         transactionalConsent,
         promotionalConsent,
@@ -200,7 +211,7 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
                 id="kiosk-phone"
                 type="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
                 className="w-full px-4 py-3 bg-slate-50 text-slate-900 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-lg"
                 required
               />
@@ -211,7 +222,7 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
                 id="kiosk-callback"
                 type="tel"
                 value={callBackNumber}
-                onChange={(e) => setCallBackNumber(e.target.value)}
+                onChange={(e) => setCallBackNumber(formatPhoneInput(e.target.value))}
                 className="w-full px-4 py-3 bg-slate-50 text-slate-900 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-lg"
               />
             </div>
