@@ -4,8 +4,19 @@
 -- ====================================================================
 
 -- 1. FIX FUNCTION SEARCH PATHS (Prevents search_path spoofing attacks)
-ALTER FUNCTION public.handle_sms_consent_timestamp() SET search_path = public;
-ALTER FUNCTION public.handle_consent_timestamp() SET search_path = public;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'handle_sms_consent_timestamp') THEN
+    EXECUTE 'ALTER FUNCTION public.handle_sms_consent_timestamp() SET search_path = public;';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'handle_consent_timestamp') THEN
+    EXECUTE 'ALTER FUNCTION public.handle_consent_timestamp() SET search_path = public;';
+  END IF;
+END $$;
 
 -- Fix is_staff function security definer & search_path
 DO $$
@@ -17,15 +28,10 @@ BEGIN
 END $$;
 
 
--- 2. MOVE EXTENSION OUT OF PUBLIC SCHEMA
-CREATE SCHEMA IF NOT EXISTS extensions;
-
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net' AND extnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')) THEN
-    ALTER EXTENSION pg_net SET SCHEMA extensions;
-  END IF;
-END $$;
+-- 2. NOTE ON EXTENSIONS IN PUBLIC SCHEMA
+-- The extension "pg_net" is non-relocatable on managed Supabase platforms and 
+-- does not support SET SCHEMA. It must remain in the public/net schema as managed 
+-- by the platform, so this step is intentionally omitted to avoid query errors.
 
 
 -- ====================================================================

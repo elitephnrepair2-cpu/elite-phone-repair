@@ -20,6 +20,7 @@ import InstantQuoteWidget from './components/InstantQuoteWidget';
 import CampaignsView from './components/CampaignsView';
 import { FrontDeskPortal } from './components/FrontDeskPortal';
 import { AnalyticsView } from './components/AnalyticsView';
+import { SMSInboxView } from './components/SMSInboxView';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { REPAIR_PRICES } from './constants/prices';
 import { sendSmsIfAllowed } from './services/smsService';

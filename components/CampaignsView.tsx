@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import type { Customer, RepairTicket, MarketingCampaign, ScheduledCampaign } from '../types';
+import type { Customer, RepairTicket, MarketingCampaign, ScheduledCampaign, SmsLog } from '../types';
 import { sendSmsViaEdgeFunction } from '../services/smsService';
 import { SMSInboxView } from './SMSInboxView';
 

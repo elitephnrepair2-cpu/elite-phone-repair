@@ -326,6 +326,139 @@ export type Database = {
         }
         Relationships: []
       }
+      marketing_campaigns: {
+        Row: {
+          id: string
+          created_at: string
+          name: string
+          location: string
+          message_body: string
+          total_recipients: number | null
+          successful_sends: number | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          name: string
+          location: string
+          message_body: string
+          total_recipients?: number | null
+          successful_sends?: number | null
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          name?: string
+          location?: string
+          message_body?: string
+          total_recipients?: number | null
+          successful_sends?: number | null
+        }
+        Relationships: []
+      }
+      scheduled_campaigns: {
+        Row: {
+          id: string
+          created_at: string
+          scheduled_for: string
+          name: string
+          location: string
+          message_body: string
+          status: string
+          total_recipients: number | null
+          successful_sends: number | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          scheduled_for: string
+          name: string
+          location: string
+          message_body: string
+          status?: string
+          total_recipients?: number | null
+          successful_sends?: number | null
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          scheduled_for?: string
+          name?: string
+          location?: string
+          message_body?: string
+          status?: string
+          total_recipients?: number | null
+          successful_sends?: number | null
+        }
+        Relationships: []
+      }
+      sms_messages: {
+        Row: {
+          id: string
+          created_at: string
+          customer_id: string | null
+          ticket_id: string | null
+          campaign_id: string | null
+          message_type: string | null
+          content: string
+          status: string
+          provider_message_id: string | null
+          error_message: string | null
+          direction: string | null
+          from_phone: string | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          customer_id?: string | null
+          ticket_id?: string | null
+          campaign_id?: string | null
+          message_type?: string | null
+          content: string
+          status: string
+          provider_message_id?: string | null
+          error_message?: string | null
+          direction?: string | null
+          from_phone?: string | null
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          customer_id?: string | null
+          ticket_id?: string | null
+          campaign_id?: string | null
+          message_type?: string | null
+          content?: string
+          status?: string
+          provider_message_id?: string | null
+          error_message?: string | null
+          direction?: string | null
+          from_phone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_messages_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_messages_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_campaigns"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never

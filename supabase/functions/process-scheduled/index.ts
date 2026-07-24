@@ -56,23 +56,43 @@ serve(async (req) => {
         .from('scheduled_campaigns')
         .update({ status: 'sending' })
         .eq('id', campaign.id)
+      // Fetch target customers matching the location and consented to marketing (paginated to bypass 1000-row limit)
+      let customers: any[] = []
+      let p = 0
+      let more = true
+      let fetchErr = null
 
-      // Fetch target customers matching the location and consented to marketing
-      const { data: customers, error: customerErr } = await supabaseClient
-        .from('customers')
-        .select('*')
-        .eq('location', campaign.location)
-        .eq('marketing_sms_consent', true)
+      while (more) {
+        const { data, error } = await supabaseClient
+          .from('customers')
+          .select('*')
+          .eq('location', campaign.location)
+          .eq('marketing_sms_consent', true)
+          .order('id', { ascending: true })
+          .range(p * 1000, (p + 1) * 1000 - 1)
 
-      if (customerErr) {
-        console.error(`Error fetching customers for campaign ${campaign.id}:`, customerErr)
+        if (error) {
+          fetchErr = error
+          break
+        }
+
+        if (!data || data.length === 0) {
+          more = false
+        } else {
+          customers = [...customers, ...data]
+          if (data.length < 1000) more = false
+          else p++
+        }
+      }
+
+      if (fetchErr) {
+        console.error(`Error fetching customers for campaign ${campaign.id}:`, fetchErr)
         await supabaseClient
           .from('scheduled_campaigns')
           .update({ status: 'failed' })
           .eq('id', campaign.id)
         continue
       }
-
       if (!customers || customers.length === 0) {
         await supabaseClient
           .from('scheduled_campaigns')
