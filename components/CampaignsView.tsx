@@ -54,6 +54,7 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
   const [isLoadingHistoryLogs, setIsLoadingHistoryLogs] = useState<boolean>(false);
   const [historyRecipientSearch, setHistoryRecipientSearch] = useState<string>('');
   const [historyRecipientFilter, setHistoryRecipientFilter] = useState<'all' | 'sent' | 'failed'>('all');
+  const [historyRecipientSort, setHistoryRecipientSort] = useState<'time' | 'alpha'>('time');
 
   // Sending Process State
   const [isSending, setIsSending] = useState(false);
@@ -1268,14 +1269,28 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
                 </button>
               </div>
 
-              {/* Search input */}
-              <div className="w-full sm:w-64">
+              {/* Search and Sort Row */}
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                {/* Sort selector */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Sort:</span>
+                  <select
+                    value={historyRecipientSort}
+                    onChange={e => setHistoryRecipientSort(e.target.value as any)}
+                    className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="time">⏰ Sent Time</option>
+                    <option value="alpha">🔤 Name A-Z</option>
+                  </select>
+                </div>
+
+                {/* Search input */}
                 <input
                   type="text"
-                  placeholder="Search recipient name or phone..."
+                  placeholder="Search recipient name..."
                   value={historyRecipientSearch}
                   onChange={e => setHistoryRecipientSearch(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  className="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-medium w-48 sm:w-56"
                 />
               </div>
             </div>
@@ -1289,7 +1304,7 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
                 </div>
               ) : (
                 (() => {
-                  const filtered = historyCampaignLogs.filter(log => {
+                  let filtered = historyCampaignLogs.filter(log => {
                     if (historyRecipientFilter === 'sent' && log.status !== 'sent') return false;
                     if (historyRecipientFilter === 'failed' && log.status === 'sent') return false;
 
@@ -1301,6 +1316,17 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
                     }
                     return true;
                   });
+
+                  // Apply selected sort order
+                  if (historyRecipientSort === 'alpha') {
+                    filtered.sort((a, b) => {
+                      const nameA = (customerMap.get(a.customer_id || '')?.name || 'Customer Record').toLowerCase();
+                      const nameB = (customerMap.get(b.customer_id || '')?.name || 'Customer Record').toLowerCase();
+                      return nameA.localeCompare(nameB);
+                    });
+                  } else {
+                    filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                  }
 
                   if (filtered.length === 0) {
                     return (
