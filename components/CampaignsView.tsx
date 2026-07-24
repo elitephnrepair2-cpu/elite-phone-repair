@@ -519,7 +519,9 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
         // Refresh UI
         setCampaignName('');
         setMessageContent('');
-        loadData();
+        // Wait 1.5 seconds for DB logs to fully commit and index in Supabase
+        await new Promise(r => setTimeout(r, 1500));
+        await loadData();
         setIsSending(false);
         showAlert(`Campaign complete!\nSuccessful sends: ${successCount}\nFailed sends: ${failCount}`);
       }
@@ -569,7 +571,10 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
       {/* Main Sub-Tabs */}
       <div className="flex bg-slate-200 dark:bg-slate-700/60 p-1.5 rounded-2xl gap-2 shadow-inner border border-slate-300 dark:border-slate-600">
         <button
-          onClick={() => setMainTab('broadcasts')}
+          onClick={() => {
+            setMainTab('broadcasts');
+            loadData();
+          }}
           className={`flex-1 py-3 rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 transition-all ${
             mainTab === 'broadcasts'
               ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-md border border-slate-200 dark:border-slate-700'
@@ -666,12 +671,17 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
 
             {/* Step 1: Audience Selection */}
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1.5 flex justify-between items-center">
-                <span>Target Audience Group</span>
-                <span className="text-[11px] text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
-                  🛡️ Smart Filter
-                </span>
-              </label>
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="block text-sm font-bold text-slate-700">Target Audience Group</label>
+                <button
+                  type="button"
+                  onClick={loadData}
+                  className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg text-[10px] border border-slate-200 transition-colors flex items-center gap-1 shadow-sm"
+                  title="Refresh audience counts from database"
+                >
+                  🔄 Refresh Counts
+                </button>
+              </div>
               <select
                 value={segmentMode}
                 onChange={e => setSegmentMode(e.target.value as any)}
