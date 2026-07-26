@@ -243,7 +243,7 @@ export const Header: React.FC<HeaderProps> = ({
                                     setIsDrawerOpen(false);
                                 }}
                                 className={`w-full flex items-center gap-3.5 px-4 py-3 text-left font-bold rounded-xl transition-colors ${
-                                    currentView === 'campaigns' || currentView === 'sms_inbox'
+                                    currentView === 'campaigns' || currentView === 'messages' || currentView === 'sms_inbox'
                                         ? 'bg-amber-500/20 text-white border border-amber-400/40'
                                         : 'text-slate-200 hover:bg-slate-800 hover:text-white border border-transparent'
                                 }`}

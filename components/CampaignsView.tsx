@@ -42,9 +42,7 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
   const [enableExclusion, setEnableExclusion] = useState<boolean>(false);
   const [selectedExcludeCampaignId, setSelectedExcludeCampaignId] = useState<string>('');
   const [recipientLimit, setRecipientLimit] = useState<string>('');
-  const [messagedCustomerIds, setMessagedCustomerIds] = useState<Set<string>>(new Set());
-  const [messagedPhones, setMessagedPhones] = useState<Set<string>>(new Set());
-  const [campaignCustomerMap, setCampaignCustomerMap] = useState<Map<string, Set<string>>>(new Map());
+  const [outboundLogs, setOutboundLogs] = useState<any[]>([]);
   const [showSegmentDetailsModal, setShowSegmentDetailsModal] = useState<boolean>(false);
   const [showTwilioDeliveryModal, setShowTwilioDeliveryModal] = useState<boolean>(false);
 
@@ -176,7 +174,7 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
       while (hasMore) {
         const { data: logs, error } = await (supabase as any)
           .from('sms_messages')
-          .select('customer_id, campaign_id, status')
+          .select('customer_id, campaign_id, status, to_phone')
           .eq('direction', 'outbound')
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -189,49 +187,7 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
         }
       }
 
-      const idSet = new Set<string>();
-      const phoneSet = new Set<string>();
-      const campMap = new Map<string, Set<string>>();
-
-      allLogs.forEach(l => {
-        if (l.status !== 'failed') {
-          if (l.customer_id) {
-            idSet.add(l.customer_id);
-
-            // Look up customer phone number for phone set
-            const cust = customerMap.get(l.customer_id);
-            if (cust && cust.phone) {
-              const digits = cust.phone.replace(/\D/g, '');
-              const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
-              if (norm && norm.length === 10) {
-                phoneSet.add(norm);
-              }
-            }
-          }
-
-          if (l.campaign_id) {
-            if (!campMap.has(l.campaign_id)) {
-              campMap.set(l.campaign_id, new Set());
-            }
-            if (l.customer_id) {
-              campMap.get(l.campaign_id)!.add(l.customer_id);
-
-              const cust = customerMap.get(l.customer_id);
-              if (cust && cust.phone) {
-                const digits = cust.phone.replace(/\D/g, '');
-                const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
-                if (norm && norm.length === 10) {
-                  campMap.get(l.campaign_id)!.add(norm);
-                }
-              }
-            }
-          }
-        }
-      });
-
-      setMessagedCustomerIds(idSet);
-      setMessagedPhones(phoneSet);
-      setCampaignCustomerMap(campMap);
+      setOutboundLogs(allLogs);
     } catch (e) {
       console.error("Error fetching messaged stats:", e);
     }
@@ -243,6 +199,69 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
     (customers || []).forEach(c => map.set(c.id, c));
     return map;
   }, [customers]);
+
+  // Dynamically compute messaged sets to prevent stale cache on empty mount
+  const { messagedCustomerIds, messagedPhones, campaignCustomerMap } = useMemo(() => {
+    const idSet = new Set<string>();
+    const phoneSet = new Set<string>();
+    const campMap = new Map<string, Set<string>>();
+
+    outboundLogs.forEach(l => {
+      if (l.status !== 'failed') {
+        if (l.customer_id) {
+          idSet.add(l.customer_id);
+
+          const cust = customerMap.get(l.customer_id);
+          if (cust && cust.phone) {
+            const digits = cust.phone.replace(/\D/g, '');
+            const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+            if (norm && norm.length === 10) {
+              phoneSet.add(norm);
+            }
+          }
+        }
+
+        if (l.to_phone) {
+          const digits = l.to_phone.replace(/\D/g, '');
+          const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+          if (norm && norm.length === 10) {
+            phoneSet.add(norm);
+          }
+        }
+
+        if (l.campaign_id) {
+          if (!campMap.has(l.campaign_id)) {
+            campMap.set(l.campaign_id, new Set());
+          }
+          if (l.customer_id) {
+            campMap.get(l.campaign_id)!.add(l.customer_id);
+
+            const cust = customerMap.get(l.customer_id);
+            if (cust && cust.phone) {
+              const digits = cust.phone.replace(/\D/g, '');
+              const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+              if (norm && norm.length === 10) {
+                campMap.get(l.campaign_id)!.add(norm);
+              }
+            }
+          }
+          if (l.to_phone) {
+            const digits = l.to_phone.replace(/\D/g, '');
+            const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+            if (norm && norm.length === 10) {
+              campMap.get(l.campaign_id)!.add(norm);
+            }
+          }
+        }
+      }
+    });
+
+    return {
+      messagedCustomerIds: idSet,
+      messagedPhones: phoneSet,
+      campaignCustomerMap: campMap
+    };
+  }, [outboundLogs, customerMap]);
 
   // Phone formatting helper
   const formatPhoneNumber = (phoneStr?: string | null) => {

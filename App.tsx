@@ -138,6 +138,32 @@ const App: React.FC = () => {
 
   const fetchData = useCallback(async () => {
     try {
+      const handleQueryError = async (source: string, error: any) => {
+        console.error(`${source} query error:`, error);
+        if (error?.message && (
+          error.message.toLowerCase().includes('jwt') || 
+          error.message.toLowerCase().includes('token') || 
+          error.message.toLowerCase().includes('expired') || 
+          error.message.toLowerCase().includes('invalid signature') ||
+          error.message.toLowerCase().includes('unauthorized')
+        )) {
+          console.warn("Stale or invalid Supabase Auth session detected. Signing out to fallback to guest/anon access...");
+          try {
+            await supabase.auth.signOut();
+          } catch (e) {
+            console.error("signOut error:", e);
+          }
+          // Remove potential localStorage items to clean cache
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('sb-') || key.includes('supabase'))) {
+              localStorage.removeItem(key);
+            }
+          }
+          window.location.reload();
+        }
+      };
+
       const fetchCustomers = async () => {
         let all: Customer[] = [];
         let p = 0;
@@ -149,7 +175,11 @@ const App: React.FC = () => {
             .eq('location', currentLocation)
             .order('created_at', { ascending: false })
             .range(p * 1000, (p + 1) * 1000 - 1);
-          if (error || !data) break;
+          if (error) {
+            await handleQueryError("fetchCustomers", error);
+            break;
+          }
+          if (!data) break;
           all = [...all, ...data];
           if (data.length < 1000) more = false;
           p++;
@@ -168,7 +198,11 @@ const App: React.FC = () => {
             .eq('location', currentLocation)
             .order('created_at', { ascending: false })
             .range(p * 1000, (p + 1) * 1000 - 1);
-          if (error || !data) break;
+          if (error) {
+            await handleQueryError("fetchTickets", error);
+            break;
+          }
+          if (!data) break;
           all = [...all, ...data as any];
           if (data.length < 1000) more = false;
           p++;
@@ -177,20 +211,26 @@ const App: React.FC = () => {
       };
 
       const fetchAppointments = async () => {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('appointments')
           .select('*')
           .eq('location', currentLocation)
           .order('date', { ascending: true });
+        if (error) {
+          await handleQueryError("fetchAppointments", error);
+        }
         return data || [];
       };
 
       const fetchParts = async () => {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('parts_orders')
           .select('*')
           .eq('location', currentLocation)
           .order('created_at', { ascending: false });
+        if (error) {
+          await handleQueryError("fetchParts", error);
+        }
         return data || [];
       };
 
