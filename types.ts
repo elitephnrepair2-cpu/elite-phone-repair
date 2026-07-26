@@ -406,6 +406,7 @@ export type Database = {
           error_message: string | null
           direction: string | null
           from_phone: string | null
+          to_phone: string | null
         }
         Insert: {
           id?: string
@@ -420,6 +421,7 @@ export type Database = {
           error_message?: string | null
           direction?: string | null
           from_phone?: string | null
+          to_phone?: string | null
         }
         Update: {
           id?: string
@@ -434,6 +436,7 @@ export type Database = {
           error_message?: string | null
           direction?: string | null
           from_phone?: string | null
+          to_phone?: string | null
         }
         Relationships: [
           {
