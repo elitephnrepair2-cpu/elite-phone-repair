@@ -847,7 +847,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col font-sans text-slate-900">
-      {view !== 'kiosk' && view !== 'kiosk_login' && view !== 'quote_widget' && activeStaff && (
+      {view !== 'kiosk' && view !== 'kiosk_login' && activeStaff && (
         <Header
           currentView={view}
           onLogoClick={() => setView('dashboard')}
@@ -857,6 +857,7 @@ const App: React.FC = () => {
           onGoToParts={() => setView('parts_dashboard')}
           onGoToSettings={() => setView('settings')}
           onGoToCampaigns={() => setView('campaigns')}
+          onGoToQuoteWidget={() => setView('quote_widget')}
           onGoToAnalytics={handleOpenAnalytics}
           onGoToMessages={() => setView('messages')}
           currentLocation={currentLocation}
