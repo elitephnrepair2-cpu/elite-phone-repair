@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import type { ShopSettings } from '../types';
 
@@ -25,6 +25,120 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
   const [manualMerchantId, setManualMerchantId] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [cloverLocation, setCloverLocation] = useState<string>(currentLocation || 'Beaumont');
+
+  // Repair Pricing Manager State
+  const [dbPrices, setDbPrices] = useState<any[]>([]);
+  const [selectedBrandFilter, setSelectedBrandFilter] = useState<'Apple' | 'Samsung'>('Apple');
+  const [modelSearchQuery, setModelSearchQuery] = useState('');
+  const [editingModel, setEditingModel] = useState<string | null>(null);
+  const [editPricesForm, setEditPricesForm] = useState<Record<string, { price: string; lcd?: string; oled?: string; oem?: string }>>({});
+  const [isSavingPrices, setIsSavingPrices] = useState(false);
+
+  const fetchPrices = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('repair_prices')
+        .select('*')
+        .order('brand', { ascending: true })
+        .order('model', { ascending: true })
+        .order('category', { ascending: true });
+      if (!error && data) {
+        setDbPrices(data);
+      }
+    } catch (e) {
+      console.error("Error fetching repair prices:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchPrices();
+  }, []);
+
+  // Group rows by Brand -> Model -> Category
+  const groupedPrices = useMemo(() => {
+    const map: Record<string, Record<string, Record<string, any>>> = {};
+    dbPrices.forEach(item => {
+      if (!map[item.brand]) map[item.brand] = {};
+      if (!map[item.brand][item.model]) map[item.brand][item.model] = {};
+      map[item.brand][item.model][item.category] = item;
+    });
+    return map;
+  }, [dbPrices]);
+
+  const modelsList = useMemo(() => {
+    const modelsOfBrand = Object.keys(groupedPrices[selectedBrandFilter] || {});
+    if (!modelSearchQuery.trim()) return modelsOfBrand;
+    const q = modelSearchQuery.toLowerCase();
+    return modelsOfBrand.filter(m => m.toLowerCase().includes(q));
+  }, [groupedPrices, selectedBrandFilter, modelSearchQuery]);
+
+  const startEditingModel = (modelName: string) => {
+    setEditingModel(modelName);
+    const modelCats = groupedPrices[selectedBrandFilter]?.[modelName] || {};
+    const formValues: Record<string, { price: string; lcd?: string; oled?: string; oem?: string }> = {};
+    
+    const REPAIR_CATEGORIES = [
+      "Screen", "Battery", "Charging Port", "Back Glass", "Back Camera Glass",
+      "Back Camera", "Front Camera", "Earpiece / Loud Speaker", "Home Button",
+      "Power / Volume Buttons", "Back Housing Frame", "Other"
+    ];
+
+    REPAIR_CATEGORIES.forEach(cat => {
+      const item = modelCats[cat] || {};
+      formValues[cat] = {
+        price: item.price || '',
+        lcd: item.lcd_price || '',
+        oled: item.oled_price || '',
+        oem: item.oem_price || ''
+      };
+    });
+    setEditPricesForm(formValues);
+  };
+
+  const saveModelPrices = async () => {
+    setIsSavingPrices(true);
+    try {
+      const modelCats = groupedPrices[selectedBrandFilter]?.[editingModel!] || {};
+      const updates = Object.keys(editPricesForm).map(async (cat) => {
+        const existingRow = modelCats[cat];
+        const formValues = editPricesForm[cat];
+        
+        if (existingRow) {
+          return supabase
+            .from('repair_prices')
+            .update({
+              price: formValues.price,
+              lcd_price: cat === 'Screen' ? formValues.lcd || null : null,
+              oled_price: cat === 'Screen' ? formValues.oled || null : null,
+              oem_price: cat === 'Screen' ? formValues.oem || null : null
+            })
+            .eq('id', existingRow.id);
+        } else {
+          return supabase
+            .from('repair_prices')
+            .insert({
+              brand: selectedBrandFilter,
+              model: editingModel!,
+              category: cat,
+              price: formValues.price,
+              lcd_price: cat === 'Screen' ? formValues.lcd || null : null,
+              oled_price: cat === 'Screen' ? formValues.oled || null : null,
+              oem_price: cat === 'Screen' ? formValues.oem || null : null
+            });
+        }
+      });
+
+      await Promise.all(updates);
+      await fetchPrices(); // refresh
+      setEditingModel(null);
+      alert(`Prices for ${editingModel} saved successfully!`);
+    } catch (e) {
+      console.error(e);
+      alert("Error saving prices to database.");
+    } finally {
+      setIsSavingPrices(false);
+    }
+  };
 
   useEffect(() => {
     fetchCloverStatus();
@@ -363,6 +477,186 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
                   Disconnect Clover
                 </button>
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* Repair Pricing Manager Card */}
+        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+          <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Instant Quote Pricing Manager
+            </h3>
+            
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={() => { setSelectedBrandFilter('Apple'); setEditingModel(null); }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${selectedBrandFilter === 'Apple' ? 'bg-red-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+              >
+                Apple
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSelectedBrandFilter('Samsung'); setEditingModel(null); }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${selectedBrandFilter === 'Samsung' ? 'bg-red-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+              >
+                Samsung
+              </button>
+            </div>
+          </div>
+          <div className="p-6 space-y-6">
+            {dbPrices.length === 0 ? (
+              <div className="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                <p className="text-slate-500 font-medium">Pricing database is empty or loading...</p>
+                <p className="text-xs text-slate-400 mt-1">Please ensure the SQL migration script has been executed in the Supabase Editor.</p>
+              </div>
+            ) : (
+              <>
+                {/* Search Bar */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder={`Search ${selectedBrandFilter} models...`}
+                    value={modelSearchQuery}
+                    onChange={(e) => setModelSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 shadow-sm"
+                  />
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 absolute left-3 top-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+
+                {/* Model Listing & Editor Layout */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Left Column: Models List */}
+                  <div className="md:col-span-1 max-h-[400px] overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 bg-slate-50">
+                    {modelsList.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-slate-400 font-medium">No models found</div>
+                    ) : (
+                      modelsList.map(model => (
+                        <button
+                          key={model}
+                          type="button"
+                          onClick={() => startEditingModel(model)}
+                          className={`w-full text-left px-4 py-3 text-sm font-bold transition-all flex justify-between items-center ${editingModel === model ? 'bg-red-50 text-red-600 border-l-4 border-red-600' : 'text-slate-700 hover:bg-slate-100'}`}
+                        >
+                          <span>{model}</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Right Column: Model Category Price Form */}
+                  <div className="md:col-span-2 border border-slate-200 rounded-xl p-5 bg-white min-h-[300px] flex flex-col justify-between">
+                    {editingModel ? (
+                      <div className="space-y-6">
+                        <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
+                          <h4 className="font-extrabold text-slate-800 text-base">Editing {editingModel} Prices</h4>
+                          <span className="text-xs font-bold text-red-600 uppercase bg-red-50 px-2 py-1 rounded">Active</span>
+                        </div>
+                        
+                        <div className="max-h-[350px] overflow-y-auto pr-2 space-y-4">
+                          {Object.keys(editPricesForm).map(cat => (
+                            <div key={cat} className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-3">
+                              <span className="block text-xs font-black tracking-wider text-slate-500 uppercase">{cat} Replacement</span>
+                              
+                              {cat === 'Screen' ? (
+                                <div className="grid grid-cols-3 gap-3">
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-600 mb-1">Standard LCD</label>
+                                    <input
+                                      type="text"
+                                      value={editPricesForm[cat].lcd || ''}
+                                      onChange={(e) => setEditPricesForm(prev => ({
+                                        ...prev,
+                                        [cat]: { ...prev[cat], lcd: e.target.value }
+                                      }))}
+                                      className="w-full px-3 py-1.5 bg-white text-slate-900 border border-slate-300 rounded focus:ring-1 focus:ring-red-500 text-sm font-bold"
+                                      placeholder="e.g. $140"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-600 mb-1">Premium OLED</label>
+                                    <input
+                                      type="text"
+                                      value={editPricesForm[cat].oled || ''}
+                                      onChange={(e) => setEditPricesForm(prev => ({
+                                        ...prev,
+                                        [cat]: { ...prev[cat], oled: e.target.value }
+                                      }))}
+                                      className="w-full px-3 py-1.5 bg-white text-slate-900 border border-slate-300 rounded focus:ring-1 focus:ring-red-500 text-sm font-bold"
+                                      placeholder="e.g. $240"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-600 mb-1">Original 1-on-1</label>
+                                    <input
+                                      type="text"
+                                      value={editPricesForm[cat].oem || ''}
+                                      onChange={(e) => setEditPricesForm(prev => ({
+                                        ...prev,
+                                        [cat]: { ...prev[cat], oem: e.target.value }
+                                      }))}
+                                      className="w-full px-3 py-1.5 bg-white text-slate-900 border border-slate-300 rounded focus:ring-1 focus:ring-red-500 text-sm font-bold"
+                                      placeholder="e.g. $295"
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <label className="block text-[10px] font-bold text-slate-600 mb-1">Price</label>
+                                  <input
+                                    type="text"
+                                    value={editPricesForm[cat].price}
+                                    onChange={(e) => setEditPricesForm(prev => ({
+                                      ...prev,
+                                      [cat]: { ...prev[cat], price: e.target.value }
+                                    }))}
+                                    className="w-full max-w-[200px] px-3 py-1.5 bg-white text-slate-900 border border-slate-300 rounded focus:ring-1 focus:ring-red-500 text-sm font-bold"
+                                    placeholder="e.g. $85 or N/A"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex space-x-3 pt-3 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={saveModelPrices}
+                            disabled={isSavingPrices}
+                            className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg text-sm transition-all disabled:opacity-50"
+                          >
+                            {isSavingPrices ? 'Saving...' : `Save ${editingModel} Prices`}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingModel(null)}
+                            className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2.5 px-4 rounded-lg text-sm transition-all"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-center py-12 text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        <p className="font-bold text-sm">Select a device model from the left column to edit its prices.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </div>

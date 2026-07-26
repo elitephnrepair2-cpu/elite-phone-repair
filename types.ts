@@ -462,6 +462,42 @@ export type Database = {
           }
         ]
       }
+      repair_prices: {
+        Row: {
+          id: string
+          created_at: string
+          brand: string
+          model: string
+          category: string
+          price: string
+          lcd_price: string | null
+          oled_price: string | null
+          oem_price: string | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          brand: string
+          model: string
+          category: string
+          price: string
+          lcd_price?: string | null
+          oled_price?: string | null
+          oem_price?: string | null
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          brand?: string
+          model?: string
+          category?: string
+          price?: string
+          lcd_price?: string | null
+          oled_price?: string | null
+          oem_price?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

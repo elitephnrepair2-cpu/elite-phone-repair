@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { REPAIR_PRICES } from '../constants/prices';
+import { supabase } from '../supabaseClient';
 import { 
   Phone, Smartphone, ChevronDown, ShieldCheck, 
   Menu, Timer, Tag, Clock, ThumbsUp, Calculator, 
@@ -16,22 +17,98 @@ const InstantQuoteWidget: React.FC<InstantQuoteWidgetProps> = ({ isInternal = fa
   const [selectedBrand, setSelectedBrand] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [selectedIssue, setSelectedIssue] = useState<string>('');
+  const [selectedTier, setSelectedTier] = useState<'lcd' | 'oled' | 'oem'>('oled');
+  const [dbPrices, setDbPrices] = useState<any[]>([]);
 
-  const availableBrands = [...Object.keys(REPAIR_PRICES), 'Other'];
-  const availableModels = selectedBrand === 'Other' ? ['Unknown / Other Model'] : (selectedBrand ? Object.keys(REPAIR_PRICES[selectedBrand] || {}) : []);
+  useEffect(() => {
+    const fetchDbPrices = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('repair_prices')
+          .select('*');
+        if (!error && data) {
+          setDbPrices(data);
+        }
+      } catch (e) {
+        console.error("Error loading quote prices:", e);
+      }
+    };
+    fetchDbPrices();
+  }, []);
+
+  const activePricingMap = useMemo(() => {
+    // Start with default REPAIR_PRICES structure
+    const map: Record<string, Record<string, Record<string, { price: string; lcd?: string; oled?: string; oem?: string }>>> = {};
+    
+    // Populate with defaults
+    Object.keys(REPAIR_PRICES).forEach(brand => {
+      map[brand] = {};
+      Object.keys(REPAIR_PRICES[brand]).forEach(model => {
+        map[brand][model] = {};
+        Object.keys(REPAIR_PRICES[brand][model]).forEach(category => {
+          const rawPrice = REPAIR_PRICES[brand][model][category];
+          if (rawPrice.includes('/')) {
+            const parts = rawPrice.split('/').map(p => p.trim());
+            const lcd = parts[0];
+            const oled = parts[1];
+            const oledNum = parseFloat(oled.replace(/[^0-9.]/g, '')) || 100;
+            const oem = `$${oledNum + 55}`;
+            map[brand][model][category] = { price: rawPrice, lcd, oled, oem };
+          } else {
+            map[brand][model][category] = { price: rawPrice };
+          }
+        });
+      });
+    });
+
+    // Override with DB values if loaded
+    if (dbPrices && dbPrices.length > 0) {
+      dbPrices.forEach(item => {
+        if (!map[item.brand]) map[item.brand] = {};
+        if (!map[item.brand][item.model]) map[item.brand][item.model] = {};
+        map[item.brand][item.model][item.category] = {
+          price: item.price,
+          lcd: item.lcd_price || undefined,
+          oled: item.oled_price || undefined,
+          oem: item.oem_price || undefined
+        };
+      });
+    }
+
+    return map;
+  }, [dbPrices]);
+
+  const availableBrands = [...Object.keys(activePricingMap), 'Other'];
+  const availableModels = selectedBrand === 'Other' ? ['Unknown / Other Model'] : (selectedBrand ? Object.keys(activePricingMap[selectedBrand] || {}) : []);
   
   const estimatedPrice = useMemo(() => {
     if (selectedBrand === 'Other') return 'Call Us';
     if (!selectedBrand || !selectedModel || !selectedIssue) return null;
-    return REPAIR_PRICES[selectedBrand]?.[selectedModel]?.[selectedIssue] || 'N/A';
-  }, [selectedBrand, selectedModel, selectedIssue]);
+    const entry = activePricingMap[selectedBrand]?.[selectedModel]?.[selectedIssue];
+    if (!entry) return 'N/A';
+
+    if (selectedIssue === 'Screen' && (entry.lcd || entry.oled || entry.oem)) {
+      return entry[selectedTier] || entry.price || 'N/A';
+    }
+    return entry.price || 'N/A';
+  }, [selectedBrand, selectedModel, selectedIssue, activePricingMap, selectedTier]);
+
+  const currentModelScreenEntry = useMemo(() => {
+    if (!selectedBrand || !selectedModel) return null;
+    return activePricingMap[selectedBrand]?.[selectedModel]?.['Screen'] || null;
+  }, [selectedBrand, selectedModel, activePricingMap]);
+
+  const hasScreenTiers = useMemo(() => {
+    return selectedIssue === 'Screen' && currentModelScreenEntry && 
+      (currentModelScreenEntry.lcd || currentModelScreenEntry.oled || currentModelScreenEntry.oem) ? true : false;
+  }, [selectedIssue, currentModelScreenEntry]);
 
   const handleNext = () => {
     if (step === 1 && selectedBrand && selectedModel) setStep(2);
     else if (step === 2 && selectedIssue) setStep(3);
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (step === 3) {
       if (typeof window !== 'undefined' && (window as any).ttq) {
         const numericPrice = estimatedPrice ? parseFloat(estimatedPrice.replace(/[^0-9.]/g, '')) : 0;
@@ -271,6 +348,67 @@ const InstantQuoteWidget: React.FC<InstantQuoteWidgetProps> = ({ isInternal = fa
           {step === 3 && (
             <div className="animate-in fade-in duration-300 text-center">
               <h3 className="font-bold uppercase tracking-wide mb-6 text-[15px]">3. YOUR INSTANT QUOTE</h3>
+              
+              {hasScreenTiers && currentModelScreenEntry && (
+                <div className="space-y-3 mb-6 text-left">
+                  <span className="block text-[11px] font-black tracking-wider text-gray-400 uppercase text-center mb-2">SELECT YOUR SCREEN QUALITY</span>
+                  
+                  {/* Standard LCD Option */}
+                  {currentModelScreenEntry.lcd && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTier('lcd')}
+                      className={`w-full p-4 rounded-xl border-2 text-left transition-all ${selectedTier === 'lcd' ? 'border-[#e21a22] bg-[#111] text-white shadow-lg shadow-red-950/20' : 'border-gray-800 bg-black/50 text-gray-400 hover:border-gray-700'}`}
+                    >
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm font-black uppercase">Standard LCD Screen</span>
+                        <span className="text-sm font-black text-[#e21a22]">{currentModelScreenEntry.lcd}</span>
+                      </div>
+                      <p className="text-[10px] leading-tight text-gray-400">
+                        Budget-friendly LCD display replacement. Colors and contrast are slightly lower grade than original, suitable for secondary phones or general budgets.
+                      </p>
+                    </button>
+                  )}
+
+                  {/* Premium OLED Option */}
+                  {currentModelScreenEntry.oled && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTier('oled')}
+                      className={`w-full p-4 rounded-xl border-2 text-left transition-all relative overflow-hidden ${selectedTier === 'oled' ? 'border-[#e21a22] bg-[#111] text-white shadow-lg shadow-red-950/20' : 'border-gray-800 bg-black/50 text-gray-400 hover:border-gray-700'}`}
+                    >
+                      <div className="absolute top-0 right-0 bg-[#e21a22] text-[8px] font-black tracking-widest text-white px-2 py-0.5 uppercase rounded-bl">
+                        RECOMMENDED
+                      </div>
+                      <div className="flex justify-between items-center mb-1 mt-1">
+                        <span className="text-sm font-black uppercase">Premium OLED Screen</span>
+                        <span className="text-sm font-black text-[#e21a22]">{currentModelScreenEntry.oled}</span>
+                      </div>
+                      <p className="text-[10px] leading-tight text-gray-400">
+                        Matches your original phone specifications. High brightness, deep true blacks, vibrant colors, and optimal battery efficiency.
+                      </p>
+                    </button>
+                  )}
+
+                  {/* Original 1-on-1 Option */}
+                  {currentModelScreenEntry.oem && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTier('oem')}
+                      className={`w-full p-4 rounded-xl border-2 text-left transition-all ${selectedTier === 'oem' ? 'border-[#e21a22] bg-[#111] text-white shadow-lg shadow-red-950/20' : 'border-gray-800 bg-black/50 text-gray-400 hover:border-gray-700'}`}
+                    >
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm font-black uppercase">Original 1-on-1 Spec</span>
+                        <span className="text-sm font-black text-[#e21a22]">{currentModelScreenEntry.oem}</span>
+                      </div>
+                      <p className="text-[10px] leading-tight text-gray-400">
+                        Factory original-grade part. Maximum screen durability, premium glass structure, and flawless touch sensitivity.
+                      </p>
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div className="bg-[#111] rounded-2xl p-6 text-white shadow-xl flex flex-col items-center relative overflow-hidden mb-6">
                 <span className="text-xs font-bold tracking-widest text-gray-400 mt-2">ESTIMATED PRICE</span>
                 <div className="text-6xl font-black tracking-tighter my-4">
