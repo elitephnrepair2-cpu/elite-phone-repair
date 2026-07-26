@@ -7,7 +7,11 @@ import {
 } from 'lucide-react';
 import { track } from '@vercel/analytics';
 
-const InstantQuoteWidget: React.FC = () => {
+interface InstantQuoteWidgetProps {
+  isInternal?: boolean;
+}
+
+const InstantQuoteWidget: React.FC<InstantQuoteWidgetProps> = ({ isInternal = false }) => {
   const [step, setStep] = useState(1);
   const [selectedBrand, setSelectedBrand] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string>('');
@@ -43,31 +47,33 @@ const InstantQuoteWidget: React.FC = () => {
   }, [step, estimatedPrice]);
 
   return (
-    <div className="bg-black min-h-screen text-white font-sans pb-24">
+    <div className={`bg-black min-h-screen text-white font-sans ${isInternal ? '' : 'pb-24'}`}>
       {/* Top Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-black sticky top-0 z-50">
-        <div className="flex items-center">
-          {/* Logo */}
-          <img src="/logo.png" alt="Elite Phone Repair Logo" className="h-12 w-auto bg-white rounded-md p-0.5 shadow-sm" />
-        </div>
-        <div className="flex items-center gap-3">
-          <a href="tel:7134716760" onClick={() => {
-            track('Top Header Call Button Clicked');
-            if (typeof window !== 'undefined' && (window as any).ttq) {
-              (window as any).ttq.track('Contact', {}, { test_event_code: 'TEST35714' });
-            }
-          }} className="bg-[#e21a22] text-white flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-xs shadow-md">
-            <Phone className="w-5 h-5 fill-current" />
-            <div className="flex flex-col text-left leading-none tracking-tight">
-              <span className="text-[9px] mb-0.5">CALL / TEXT</span>
-              <span className="text-[11px]">(713) 471-6760</span>
-            </div>
-          </a>
-          <button className="p-1">
-            <Menu className="w-8 h-8" />
-          </button>
-        </div>
-      </header>
+      {!isInternal && (
+        <header className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-black sticky top-0 z-50">
+          <div className="flex items-center">
+            {/* Logo */}
+            <img src="/logo.png" alt="Elite Phone Repair Logo" className="h-12 w-auto bg-white rounded-md p-0.5 shadow-sm" />
+          </div>
+          <div className="flex items-center gap-3">
+            <a href="tel:7134716760" onClick={() => {
+              track('Top Header Call Button Clicked');
+              if (typeof window !== 'undefined' && (window as any).ttq) {
+                (window as any).ttq.track('Contact', {}, { test_event_code: 'TEST35714' });
+              }
+            }} className="bg-[#e21a22] text-white flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-xs shadow-md">
+              <Phone className="w-5 h-5 fill-current" />
+              <div className="flex flex-col text-left leading-none tracking-tight">
+                <span className="text-[9px] mb-0.5">CALL / TEXT</span>
+                <span className="text-[11px]">(713) 471-6760</span>
+              </div>
+            </a>
+            <button className="p-1">
+              <Menu className="w-8 h-8" />
+            </button>
+          </div>
+        </header>
+      )}
 
       {/* Hero Section */}
       <section className="relative px-4 py-8 overflow-hidden">
@@ -322,28 +328,30 @@ const InstantQuoteWidget: React.FC = () => {
       </section>
 
       {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 w-full bg-black border-t border-gray-800 z-50 px-1 py-2 flex justify-between items-center text-[9px] font-bold tracking-wider">
-        <a href="#" className="flex flex-col items-center justify-center w-1/5 text-white bg-[#d01017] rounded-xl py-2">
-          <Calculator className="w-5 h-5 mb-1" />
-          <span>INSTANT QUOTE</span>
-        </a>
-        <a href="#" className="flex flex-col items-center justify-center w-1/5 text-gray-400 hover:text-white py-2">
-          <Wrench className="w-5 h-5 mb-1" />
-          <span>REPAIRS</span>
-        </a>
-        <a href="#" className="flex flex-col items-center justify-center w-1/5 text-gray-400 hover:text-white py-2">
-          <Star className="w-5 h-5 mb-1" />
-          <span>REVIEWS</span>
-        </a>
-        <a href="#" className="flex flex-col items-center justify-center w-1/5 text-gray-400 hover:text-white py-2">
-          <MapPin className="w-5 h-5 mb-1" />
-          <span>LOCATION</span>
-        </a>
-        <a href="#" className="flex flex-col items-center justify-center w-1/5 text-gray-400 hover:text-white py-2">
-          <MessageCircle className="w-5 h-5 mb-1" />
-          <span>CONTACT</span>
-        </a>
-      </nav>
+      {!isInternal && (
+        <nav className="fixed bottom-0 left-0 w-full bg-black border-t border-gray-800 z-50 px-1 py-2 flex justify-between items-center text-[9px] font-bold tracking-wider">
+          <a href="#" className="flex flex-col items-center justify-center w-1/5 text-white bg-[#d01017] rounded-xl py-2">
+            <Calculator className="w-5 h-5 mb-1" />
+            <span>INSTANT QUOTE</span>
+          </a>
+          <a href="#" className="flex flex-col items-center justify-center w-1/5 text-gray-400 hover:text-white py-2">
+            <Wrench className="w-5 h-5 mb-1" />
+            <span>REPAIRS</span>
+          </a>
+          <a href="#" className="flex flex-col items-center justify-center w-1/5 text-gray-400 hover:text-white py-2">
+            <Star className="w-5 h-5 mb-1" />
+            <span>REVIEWS</span>
+          </a>
+          <a href="#" className="flex flex-col items-center justify-center w-1/5 text-gray-400 hover:text-white py-2">
+            <MapPin className="w-5 h-5 mb-1" />
+            <span>LOCATION</span>
+          </a>
+          <a href="#" className="flex flex-col items-center justify-center w-1/5 text-gray-400 hover:text-white py-2">
+            <MessageCircle className="w-5 h-5 mb-1" />
+            <span>CONTACT</span>
+          </a>
+        </nav>
+      )}
 
       {/* Style for hiding scrollbar */}
       <style>{`

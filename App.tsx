@@ -597,7 +597,7 @@ const App: React.FC = () => {
       />;
     }
     if (view === 'quote_widget') {
-      return <InstantQuoteWidget />;
+      return <InstantQuoteWidget isInternal={activeStaff !== null} />;
     }
 
     // Require staff authentication for all internal CRM workstation tools
