@@ -8,6 +8,7 @@ interface HeaderProps {
     onGoToCustomers: () => void;
     onGoToAppointments: () => void;
     onGoToParts: () => void;
+    onGoToQuotes: () => void;
     onGoToSettings: () => void;
     onGoToCampaigns: () => void;
     onGoToAnalytics: () => void;
@@ -29,6 +30,7 @@ export const Header: React.FC<HeaderProps> = ({
     onGoToCustomers,
     onGoToAppointments,
     onGoToParts,
+    onGoToQuotes,
     onGoToSettings,
     onGoToCampaigns,
     onGoToAnalytics,
@@ -226,7 +228,7 @@ export const Header: React.FC<HeaderProps> = ({
                                     setIsDrawerOpen(false);
                                 }}
                                 className={`w-full flex items-center gap-3.5 px-4 py-3 text-left font-bold rounded-xl transition-colors ${
-                                    currentView === 'customers' || currentView === 'customers_table'
+                                    currentView === 'customers' || currentView === 'customers_table' || currentView === 'customers_dashboard'
                                         ? 'bg-sky-500/20 text-white border border-sky-400/40'
                                         : 'text-slate-200 hover:bg-slate-800 hover:text-white border border-transparent'
                                 }`}
@@ -235,6 +237,23 @@ export const Header: React.FC<HeaderProps> = ({
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                                 </svg>
                                 <span>Customers List</span>
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    onGoToQuotes();
+                                    setIsDrawerOpen(false);
+                                }}
+                                className={`w-full flex items-center gap-3.5 px-4 py-3 text-left font-bold rounded-xl transition-colors ${
+                                    currentView === 'quotes_dashboard' || currentView === 'new_quote' || currentView === 'edit_quote'
+                                        ? 'bg-teal-500/20 text-white border border-teal-400/40'
+                                        : 'text-slate-200 hover:bg-slate-800 hover:text-white border border-transparent'
+                                }`}
+                            >
+                                <svg className="w-5 h-5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span>Quotes CRM Dashboard</span>
                             </button>
 
                             <button

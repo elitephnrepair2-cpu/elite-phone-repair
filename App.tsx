@@ -21,6 +21,8 @@ import CampaignsView from './components/CampaignsView';
 import { FrontDeskPortal } from './components/FrontDeskPortal';
 import { AnalyticsView } from './components/AnalyticsView';
 import { SMSInboxView } from './components/SMSInboxView';
+import QuoteList from './components/QuoteList';
+import QuoteForm from './components/QuoteForm';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { REPAIR_PRICES } from './constants/prices';
 import { sendSmsIfAllowed } from './services/smsService';
@@ -41,6 +43,8 @@ const App: React.FC = () => {
   const [tickets, setTickets] = useState<RepairTicket[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [partsOrders, setPartsOrders] = useState<PartsOrder[]>([]);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [activeQuote, setActiveQuote] = useState<Quote | null>(null);
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
@@ -234,17 +238,31 @@ const App: React.FC = () => {
         return data || [];
       };
 
-      const [custs, tix, appts, parts] = await Promise.all([
+      const fetchQuotes = async () => {
+        const { data, error } = await supabase
+          .from('quotes')
+          .select('*')
+          .eq('location', currentLocation)
+          .order('created_at', { ascending: false });
+        if (error) {
+          await handleQueryError("fetchQuotes", error);
+        }
+        return data || [];
+      };
+
+      const [custs, tix, appts, parts, qts] = await Promise.all([
         fetchCustomers(),
         fetchTickets(),
         fetchAppointments(),
-        fetchParts()
+        fetchParts(),
+        fetchQuotes()
       ]);
 
       setCustomers(custs);
       setTickets(tix as any);
       setAppointments(appts);
       setPartsOrders(parts);
+      setQuotes(qts);
     } catch (e) {
       console.error("Data fetch error:", e);
     }
@@ -259,6 +277,7 @@ const App: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'parts_orders' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sms_messages' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'quotes' }, () => fetchData())
       .subscribe();
 
     return () => {
@@ -842,6 +861,34 @@ const App: React.FC = () => {
             fetchData();
           }}
         />;
+      case 'quotes_dashboard':
+        return <QuoteList
+          quotes={quotes}
+          onCreateNew={() => {
+            setActiveQuote(null);
+            setView('new_quote');
+          }}
+          onEdit={(quote) => {
+            setActiveQuote(quote);
+            setView('edit_quote');
+          }}
+          onDelete={async (id) => {
+            const { error } = await supabase.from('quotes').delete().eq('id', id);
+            if (error) alert("Error deleting quote: " + error.message);
+            fetchData();
+          }}
+        />;
+      case 'new_quote':
+      case 'edit_quote':
+        return <QuoteForm
+          onSaved={() => {
+            fetchData();
+            setView('quotes_dashboard');
+          }}
+          onCancel={() => setView('quotes_dashboard')}
+          initialData={activeQuote}
+          currentLocation={currentLocation}
+        />;
       case 'settings':
         return <SettingsView
           settings={settings}
@@ -895,6 +942,7 @@ const App: React.FC = () => {
           onGoToCustomers={() => setView('customers_dashboard')}
           onGoToAppointments={() => setView('appointments_dashboard')}
           onGoToParts={() => setView('parts_dashboard')}
+          onGoToQuotes={() => setView('quotes_dashboard')}
           onGoToSettings={() => setView('settings')}
           onGoToCampaigns={() => setView('campaigns')}
           onGoToQuoteWidget={() => setView('quote_widget')}
