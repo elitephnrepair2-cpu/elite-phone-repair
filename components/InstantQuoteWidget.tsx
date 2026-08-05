@@ -4,7 +4,8 @@ import { supabase } from '../supabaseClient';
 import { 
   Phone, Smartphone, ChevronDown, ShieldCheck, 
   Menu, Timer, Tag, Clock, ThumbsUp, Calculator, 
-  Wrench, Star, MapPin, MessageCircle, ArrowRight
+  Wrench, Star, MapPin, MessageCircle, ArrowRight,
+  Search, ArrowLeft, HelpCircle, Check
 } from 'lucide-react';
 import { track } from '@vercel/analytics';
 
@@ -13,12 +14,21 @@ interface InstantQuoteWidgetProps {
 }
 
 const InstantQuoteWidget: React.FC<InstantQuoteWidgetProps> = ({ isInternal = false }) => {
+  const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('mobile');
   const [step, setStep] = useState(1);
   const [selectedBrand, setSelectedBrand] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [selectedIssue, setSelectedIssue] = useState<string>('');
   const [selectedTier, setSelectedTier] = useState<'lcd' | 'oled' | 'oem'>('oled');
   const [dbPrices, setDbPrices] = useState<any[]>([]);
+  const [modelSearch, setModelSearch] = useState('');
+
+  // Auto-detect screen size on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setViewMode(window.innerWidth < 768 ? 'mobile' : 'desktop');
+    }
+  }, []);
 
   useEffect(() => {
     const fetchDbPrices = async () => {
@@ -37,7 +47,6 @@ const InstantQuoteWidget: React.FC<InstantQuoteWidgetProps> = ({ isInternal = fa
   }, []);
 
   const activePricingMap = useMemo(() => {
-    // Start with default REPAIR_PRICES structure
     const map: Record<string, Record<string, Record<string, { price: string; lcd?: string; oled?: string; oem?: string }>>> = {};
     
     // Populate with defaults
@@ -79,7 +88,18 @@ const InstantQuoteWidget: React.FC<InstantQuoteWidgetProps> = ({ isInternal = fa
   }, [dbPrices]);
 
   const availableBrands = [...Object.keys(activePricingMap), 'Other'];
-  const availableModels = selectedBrand === 'Other' ? ['Unknown / Other Model'] : (selectedBrand ? Object.keys(activePricingMap[selectedBrand] || {}) : []);
+  const availableModels = useMemo(() => {
+    if (selectedBrand === 'Other') return ['Unknown / Other Model'];
+    if (!selectedBrand) return [];
+    return Object.keys(activePricingMap[selectedBrand] || {});
+  }, [selectedBrand, activePricingMap]);
+
+  const filteredModels = useMemo(() => {
+    if (!modelSearch) return availableModels;
+    return availableModels.filter(model => 
+      model.toLowerCase().includes(modelSearch.toLowerCase())
+    );
+  }, [availableModels, modelSearch]);
   
   const estimatedPrice = useMemo(() => {
     if (selectedBrand === 'Other') return 'Call Us';
@@ -125,11 +145,11 @@ const InstantQuoteWidget: React.FC<InstantQuoteWidgetProps> = ({ isInternal = fa
 
   return (
     <div className={`bg-black min-h-screen text-white font-sans ${isInternal ? '' : 'pb-24'}`}>
+      
       {/* Top Header */}
       {!isInternal && (
         <header className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-black sticky top-0 z-50">
           <div className="flex items-center">
-            {/* Logo */}
             <img src="/logo.png" alt="Elite Phone Repair Logo" className="h-12 w-auto bg-white rounded-md p-0.5 shadow-sm" />
           </div>
           <div className="flex items-center gap-3">
@@ -152,318 +172,585 @@ const InstantQuoteWidget: React.FC<InstantQuoteWidgetProps> = ({ isInternal = fa
         </header>
       )}
 
-      {/* Hero Section */}
-      <section className="relative px-4 py-8 overflow-hidden">
-        {/* Red Grunge bg effect */}
-        <div className="absolute top-0 right-0 w-full h-full opacity-30 pointer-events-none" style={{ background: 'radial-gradient(circle at top right, #e21a22 0%, transparent 60%)' }}></div>
-        
-        <div className="relative z-10 flex flex-col">
-          <div className="inline-block bg-[#e21a22] text-white font-black italic px-3 py-1 text-sm transform -skew-x-12 w-max mb-2">
-            <span className="transform skew-x-12 block">GET IT FIXED TODAY.</span>
-          </div>
-          <h1 className="text-5xl font-black italic uppercase leading-[0.9] tracking-tighter mb-3">
-            INSTANT QUOTE<br/>
-            <span className="text-[#e21a22]">IN SECONDS.</span>
-          </h1>
-          <div className="flex items-center gap-2 text-sm font-bold italic tracking-wide text-gray-200">
-            <span>FAST.</span>
-            <span>AFFORDABLE.</span>
-            <span>TRUSTED.</span>
-          </div>
-          <div className="text-[#e21a22] font-black italic mt-1 flex items-center">
-            <div className="w-8 h-[2px] bg-[#e21a22] mr-2"></div>
-            WE GOT YOU.
-            <div className="w-16 h-[2px] bg-[#e21a22] ml-2"></div>
-          </div>
+      {/* Mode Switcher Pill */}
+      <div className="flex justify-center py-3 bg-slate-950/80 backdrop-blur-md sticky top-0 z-40 border-b border-gray-900">
+        <div className="bg-gray-900/90 p-1 rounded-full flex items-center border border-gray-800/80 shadow-inner">
+          <button
+            onClick={() => setViewMode('mobile')}
+            className={`px-5 py-1.5 rounded-full text-xs font-extrabold transition-all flex items-center gap-1.5 ${
+              viewMode === 'mobile'
+                ? 'bg-red-600 text-white shadow'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            MOBILE FLOW
+          </button>
+          <button
+            onClick={() => setViewMode('desktop')}
+            className={`px-5 py-1.5 rounded-full text-xs font-extrabold transition-all flex items-center gap-1.5 ${
+              viewMode === 'desktop'
+                ? 'bg-red-600 text-white shadow'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <Calculator className="w-3.5 h-3.5" />
+            DESKTOP WIDGET
+          </button>
         </div>
-        
-        {/* Phone Image Placeholder */}
-        <div className="absolute -right-8 -bottom-4 w-48 h-64 pointer-events-none opacity-90 rotate-12">
-           <img src="https://images.unsplash.com/photo-1592839719941-8e2651039d01?w=400&q=80" alt="Cracked phone" className="rounded-[2rem] border-[6px] border-gray-400 shadow-2xl object-cover h-full w-full" style={{filter: 'grayscale(30%) brightness(0.9)'}} />
-        </div>
-      </section>
+      </div>
 
-      {/* Features Row */}
-      <section className="px-4 py-4">
-        <div className="flex overflow-x-auto gap-3 pb-2 snap-x hide-scrollbar">
-          {/* Feature 1 */}
-          <div className="min-w-[110px] flex-shrink-0 border border-gray-800 rounded-xl p-3 flex flex-col items-center text-center snap-center bg-black/50">
-            <Timer className="w-8 h-8 text-[#e21a22] mb-2" />
-            <span className="font-black text-[11px] uppercase leading-tight mb-1">Same-Day<br/>Repairs</span>
-            <span className="text-[10px] text-gray-400">Walk in. Walk out.</span>
-          </div>
-          {/* Feature 2 */}
-          <div className="min-w-[110px] flex-shrink-0 border border-gray-800 rounded-xl p-3 flex flex-col items-center text-center snap-center bg-black/50">
-            <ShieldCheck className="w-8 h-8 text-[#e21a22] mb-2" />
-            <span className="font-black text-[11px] uppercase leading-tight mb-1">Lifetime<br/>Warranty*</span>
-            <span className="text-[10px] text-gray-400">We stand on<br/>our work.</span>
-          </div>
-          {/* Feature 3 */}
-          <div className="min-w-[110px] flex-shrink-0 border border-gray-800 rounded-xl p-3 flex flex-col items-center text-center snap-center bg-black/50">
-            <Tag className="w-8 h-8 text-[#e21a22] mb-2" />
-            <span className="font-black text-[11px] uppercase leading-tight mb-1">Fair Prices</span>
-            <span className="text-[10px] text-gray-400">No hidden<br/>fees.</span>
-          </div>
-           {/* Feature 4 */}
-           <div className="min-w-[110px] flex-shrink-0 border border-gray-800 rounded-xl p-3 flex flex-col items-center text-center snap-center bg-black/50">
-            <Clock className="w-8 h-8 text-[#e21a22] mb-2" />
-            <span className="font-black text-[11px] uppercase leading-tight mb-1">Most Repairs<br/>Under 1 Hour</span>
-            <span className="text-[10px] text-gray-400">Fast, reliable,<br/>no long waits.</span>
-          </div>
-           {/* Feature 5 */}
-           <div className="min-w-[110px] flex-shrink-0 border border-gray-800 rounded-xl p-3 flex flex-col items-center text-center snap-center bg-black/50">
-            <ThumbsUp className="w-8 h-8 text-[#e21a22] mb-2" />
-            <span className="font-black text-[11px] uppercase leading-tight mb-1">5-Star<br/>Service</span>
-            <span className="text-[10px] text-gray-400">Honest work.<br/>Real results.</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Main Quote Card */}
-      <section className="px-4 mt-2">
-        <div className="bg-[#f4f2ee] text-black rounded-2xl p-5 md:p-8 shadow-xl">
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-black italic uppercase tracking-tight">
-              GET YOUR <span className="text-[#e21a22]">INSTANT QUOTE</span>
-            </h2>
-            <p className="text-sm text-gray-700 mt-1 font-medium">Just answer a few quick questions and see your price!</p>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="flex justify-between items-center mb-8 relative px-2">
-            <div className="absolute left-[15%] right-[15%] top-4 h-[2px] bg-gray-300 -z-10"></div>
-            <div className={`absolute left-[15%] top-4 h-[2px] bg-[#e21a22] -z-10 transition-all duration-500`} style={{ width: step === 1 ? '0%' : step === 2 ? '50%' : '70%' }}></div>
-
-            <div className="flex flex-col items-center w-1/3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shadow-sm border-2 border-[#f4f2ee] ${step >= 1 ? 'bg-[#e21a22] text-white' : 'bg-gray-300 text-white'}`}>1</div>
-              <span className={`mt-2 font-bold text-[9px] tracking-wider text-center uppercase ${step >= 1 ? 'text-[#e21a22]' : 'text-gray-400'}`}>Select Device</span>
-            </div>
-            <div className="flex flex-col items-center w-1/3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shadow-sm border-2 border-[#f4f2ee] ${step >= 2 ? 'bg-[#e21a22] text-white' : 'bg-gray-300 text-white'}`}>2</div>
-              <span className={`mt-2 font-bold text-[9px] tracking-wider text-center uppercase ${step >= 2 ? 'text-gray-500' : 'text-gray-400'}`}>Select Issue</span>
-            </div>
-            <div className="flex flex-col items-center w-1/3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shadow-sm border-2 border-[#f4f2ee] ${step >= 3 ? 'bg-[#e21a22] text-white' : 'bg-gray-300 text-white'}`}>3</div>
-              <span className={`mt-2 font-bold text-[9px] tracking-wider text-center uppercase ${step >= 3 ? 'text-gray-500' : 'text-gray-400'}`}>Get Quote</span>
+      {viewMode === 'mobile' ? (
+        /* ==================== HIGH-FIDELITY MOBILE FLOW ==================== */
+        <div className="max-w-md mx-auto px-4 py-6 animate-in fade-in duration-300">
+          
+          {/* Progress Indicator */}
+          <div className="flex items-center justify-between mb-6 bg-gray-900/40 rounded-xl p-3 border border-gray-900 text-xs">
+            <span className="font-bold text-gray-400">Step {step} of 3</span>
+            <div className="flex gap-1.5">
+              <div className={`h-2 w-8 rounded-full transition-all duration-300 ${step >= 1 ? 'bg-red-600' : 'bg-gray-800'}`}></div>
+              <div className={`h-2 w-8 rounded-full transition-all duration-300 ${step >= 2 ? 'bg-red-600' : 'bg-gray-800'}`}></div>
+              <div className={`h-2 w-8 rounded-full transition-all duration-300 ${step >= 3 ? 'bg-red-600' : 'bg-gray-800'}`}></div>
             </div>
           </div>
 
-          {/* Step Content */}
           {step === 1 && (
-            <div className="animate-in fade-in duration-300">
-              <h3 className="font-bold uppercase tracking-wide mb-4 text-[15px]">1. SELECT YOUR DEVICE</h3>
-              <div className="space-y-3">
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500">
-                    <Smartphone className="w-6 h-6 stroke-[1.5]" />
+            <div className="space-y-6">
+              {!selectedBrand ? (
+                /* Select Brand */
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <h2 className="text-2xl font-black italic tracking-tight uppercase">Select Your Device</h2>
+                    <p className="text-xs text-gray-400 mt-1">Tap your device manufacturer to begin</p>
                   </div>
-                  <select 
-                    className="w-full appearance-none bg-white border border-gray-200 rounded-xl py-4 pl-12 pr-10 font-bold text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#e21a22]"
-                    value={selectedBrand}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setSelectedBrand(val);
-                      if (val === 'Other') {
-                        setSelectedModel('Unknown / Other Model');
-                      } else {
-                        setSelectedModel('');
-                      }
-                    }}
-                  >
-                    <option value="" disabled>Select Device Type</option>
+                  <div className="grid grid-cols-2 gap-3.5">
                     {availableBrands.map(brand => (
-                      <option key={brand} value={brand}>{brand}</option>
+                      <button
+                        key={brand}
+                        onClick={() => setSelectedBrand(brand)}
+                        className="aspect-square flex flex-col items-center justify-center p-6 bg-gradient-to-b from-gray-900 to-black hover:from-gray-800 hover:to-gray-900 border border-gray-800 rounded-2xl transition-all shadow-lg hover:shadow-red-950/10 hover:border-red-900/50 group active:scale-95"
+                      >
+                        <Smartphone className="w-10 h-10 text-gray-400 group-hover:text-red-500 mb-3.5 transition-colors" />
+                        <span className="font-bold text-base tracking-wide uppercase">{brand}</span>
+                      </button>
                     ))}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-gray-800">
-                    <ChevronDown className="w-5 h-5" />
                   </div>
                 </div>
-
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500">
-                    <Smartphone className="w-6 h-6 stroke-[1.5]" />
+              ) : (
+                /* Select Model */
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        setSelectedBrand('');
+                        setSelectedModel('');
+                        setModelSearch('');
+                      }}
+                      className="p-2 rounded-lg bg-gray-900 border border-gray-800 text-gray-400 hover:text-white"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                    </button>
+                    <div>
+                      <h2 className="text-lg font-black uppercase tracking-tight italic">Select {selectedBrand} Model</h2>
+                      <p className="text-[11px] text-gray-400">Choose your specific device model</p>
+                    </div>
                   </div>
-                  <select 
-                    className="w-full appearance-none bg-white border border-gray-200 rounded-xl py-4 pl-12 pr-10 font-bold text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#e21a22] disabled:opacity-50 disabled:bg-gray-50"
-                    value={selectedModel}
-                    onChange={(e) => setSelectedModel(e.target.value)}
-                    disabled={!selectedBrand}
-                  >
-                    <option value="" disabled>Select Make & Model</option>
-                    {availableModels.map(model => (
-                      <option key={model} value={model}>{model}</option>
+
+                  {/* Search bar for models */}
+                  {selectedBrand !== 'Other' && (
+                    <div className="relative">
+                      <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" />
+                      <input
+                        type="text"
+                        placeholder="Search model (e.g. iPhone 15)..."
+                        value={modelSearch}
+                        onChange={(e) => setModelSearch(e.target.value)}
+                        className="w-full bg-gray-900 border border-gray-800 rounded-xl py-3 pl-10 pr-4 text-sm font-bold placeholder-gray-500 text-white focus:outline-none focus:border-red-600/70"
+                      />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 gap-2 max-h-[360px] overflow-y-auto pr-1">
+                    {filteredModels.map(model => (
+                      <button
+                        key={model}
+                        onClick={() => {
+                          setSelectedModel(model);
+                          setStep(2);
+                        }}
+                        className={`w-full py-3.5 px-4 bg-gray-900/50 hover:bg-red-950/20 border text-left rounded-xl transition-all font-bold flex items-center justify-between ${
+                          selectedModel === model ? 'border-red-600 text-white bg-red-950/30' : 'border-gray-900 hover:border-gray-800 text-gray-300'
+                        }`}
+                      >
+                        <span>{model}</span>
+                        <ArrowRight className="w-4 h-4 text-gray-600 group-hover:text-red-500" />
+                      </button>
                     ))}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-gray-800">
-                    <ChevronDown className="w-5 h-5" />
+                    {filteredModels.length === 0 && (
+                      <p className="text-center py-8 text-xs text-gray-500">No matching models found.</p>
+                    )}
                   </div>
                 </div>
-
-                <button 
-                  onClick={handleNext}
-                  disabled={!selectedBrand || !selectedModel}
-                  className="w-full bg-[#d01017] text-white font-bold py-4 rounded-xl mt-4 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity tracking-wide"
-                >
-                  NEXT: SELECT ISSUE <ArrowRight className="w-5 h-5" />
-                </button>
-              </div>
+              )}
             </div>
           )}
 
           {step === 2 && (
-            <div className="animate-in fade-in duration-300">
-               <h3 className="font-bold uppercase tracking-wide mb-4 text-[15px]">2. WHAT'S THE ISSUE?</h3>
-               {/* Issues Grid */}
-               <div className="grid grid-cols-2 gap-3 mb-4">
-                 {[
-                   { id: 'Screen', label: 'Cracked Screen' },
-                   { id: 'Battery', label: 'Battery Issues' },
-                   { id: 'Charging Port', label: 'Charging Port' },
-                   { id: 'Back Camera', label: 'Camera Issues' },
-                   { id: 'Earpiece / Loud Speaker', label: 'Speaker Issues' },
-                   { id: 'Other', label: 'Other Issue' }
-                 ].map(issue => (
-                   <button
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setStep(1)}
+                  className="p-2 rounded-lg bg-gray-900 border border-gray-800 text-gray-400 hover:text-white"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div>
+                  <h2 className="text-lg font-black uppercase tracking-tight italic">What's the issue?</h2>
+                  <p className="text-[11px] text-gray-400">{selectedBrand} {selectedModel}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2.5">
+                {[
+                  { id: 'Screen', label: 'Cracked Screen Repair', desc: 'Display bleed, lines, or cracked glass' },
+                  { id: 'Battery', label: 'Battery Replacement', desc: 'Draining fast, overheating, or swelling' },
+                  { id: 'Charging Port', label: 'Charging Port Fix', desc: 'Loose plug, slow charging, or no connection' },
+                  { id: 'Back Glass', label: 'Back Glass Repair', desc: 'Cracked or shattered rear glass panel' },
+                  { id: 'Back Camera Glass', label: 'Camera Glass Repair', desc: 'Lens cover scratch, cracks, or blur' },
+                  { id: 'Back Camera', label: 'Back Camera Replace', desc: 'Shaking, black screen, or autofocus fail' },
+                  { id: 'Earpiece / Loud Speaker', label: 'Speaker Repair', desc: 'Static noise, low sound, or muffled audio' },
+                  { id: 'Other', label: 'Diagnostic / Other Issue', desc: 'Water damage, software, or multiple issues' }
+                ].map(issue => (
+                  <button
                     key={issue.id}
                     onClick={() => {
                       setSelectedIssue(issue.id);
-                      setTimeout(() => setStep(3), 150); // Auto advance
+                      setStep(3);
                     }}
-                    className={`p-4 rounded-xl border-2 text-center transition-all ${selectedIssue === issue.id ? 'border-[#e21a22] bg-red-50 text-gray-900' : 'border-gray-200 bg-white text-gray-600'}`}
-                   >
-                     <span className="text-sm font-bold block">{issue.label}</span>
-                   </button>
-                 ))}
-               </div>
-               <button 
-                  onClick={() => setStep(1)}
-                  className="w-full bg-gray-200 text-gray-700 font-bold py-4 rounded-xl mt-2 flex items-center justify-center gap-2 transition-opacity"
-                >
-                  BACK
-                </button>
+                    className={`p-4 bg-gray-900/60 hover:bg-red-950/15 border text-left rounded-xl transition-all ${
+                      selectedIssue === issue.id ? 'border-red-600 bg-red-950/20' : 'border-gray-900 hover:border-gray-800'
+                    }`}
+                  >
+                    <span className="font-bold text-sm block text-white uppercase">{issue.label}</span>
+                    <span className="text-[10px] text-gray-400 mt-0.5 block">{issue.desc}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
           {step === 3 && (
-            <div className="animate-in fade-in duration-300 text-center">
-              <h3 className="font-bold uppercase tracking-wide mb-6 text-[15px]">3. YOUR INSTANT QUOTE</h3>
-              
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setStep(2)}
+                  className="p-2 rounded-lg bg-gray-900 border border-gray-800 text-gray-400 hover:text-white"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div>
+                  <h2 className="text-lg font-black uppercase tracking-tight italic">Your Instant Quote</h2>
+                  <p className="text-[11px] text-gray-400">{selectedBrand} {selectedModel} • {selectedIssue}</p>
+                </div>
+              </div>
+
+              {/* Display price in big ticket layout */}
+              <div className="bg-gradient-to-b from-gray-900 to-black border border-gray-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden text-center">
+                <div className="absolute top-0 left-0 w-full h-[3px] bg-[#e21a22]"></div>
+                
+                <span className="text-[10px] font-black tracking-widest text-gray-400 uppercase">ESTIMATED PRICE</span>
+                <div className="text-5xl font-black tracking-tighter text-white my-3">
+                  {estimatedPrice}
+                </div>
+
+                <div className="flex justify-center gap-4 text-xs font-bold text-gray-400 mb-2">
+                  <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-red-500" /> &lt; 1 HR REPAIR</span>
+                  <span className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-red-500" /> WARRANTY</span>
+                </div>
+              </div>
+
+              {/* Screen quality tiers inside mobile view if screen selected */}
               {hasScreenTiers && currentModelScreenEntry && (
-                <div className="space-y-3 mb-6 text-left">
-                  <span className="block text-[11px] font-black tracking-wider text-gray-400 uppercase text-center mb-2">SELECT YOUR SCREEN QUALITY</span>
+                <div className="space-y-3">
+                  <span className="block text-[10px] font-black tracking-widest text-gray-400 uppercase text-center">Select Screen Quality</span>
                   
-                  {/* Standard LCD Option */}
                   {currentModelScreenEntry.lcd && (
                     <button
-                      type="button"
                       onClick={() => setSelectedTier('lcd')}
-                      className={`w-full p-4 rounded-xl border-2 text-left transition-all ${selectedTier === 'lcd' ? 'border-[#e21a22] bg-[#111] text-white shadow-lg shadow-red-950/20' : 'border-gray-800 bg-black/50 text-gray-400 hover:border-gray-700'}`}
+                      className={`w-full p-4 rounded-xl border text-left transition-all ${
+                        selectedTier === 'lcd' ? 'border-red-600 bg-red-950/20' : 'border-gray-900 bg-gray-900/50 text-gray-300'
+                      }`}
                     >
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-sm font-black uppercase">Standard LCD Screen</span>
-                        <span className="text-sm font-black text-[#e21a22]">{currentModelScreenEntry.lcd}</span>
+                      <div className="flex justify-between items-center mb-0.5">
+                        <span className="text-xs font-extrabold uppercase">Standard LCD</span>
+                        <span className="text-sm font-black text-red-500">{currentModelScreenEntry.lcd}</span>
                       </div>
-                      <p className="text-[10px] leading-tight text-gray-400">
-                        Budget-friendly LCD display replacement. Colors and contrast are slightly lower grade than original, suitable for secondary phones or general budgets.
-                      </p>
+                      <p className="text-[9px] text-gray-400 leading-tight">Budget-friendly display. Suitability: Secondary phone.</p>
                     </button>
                   )}
 
-                  {/* Premium OLED Option */}
                   {currentModelScreenEntry.oled && (
                     <button
-                      type="button"
                       onClick={() => setSelectedTier('oled')}
-                      className={`w-full p-4 rounded-xl border-2 text-left transition-all relative overflow-hidden ${selectedTier === 'oled' ? 'border-[#e21a22] bg-[#111] text-white shadow-lg shadow-red-950/20' : 'border-gray-800 bg-black/50 text-gray-400 hover:border-gray-700'}`}
+                      className={`w-full p-4 rounded-xl border text-left transition-all relative overflow-hidden ${
+                        selectedTier === 'oled' ? 'border-red-600 bg-red-950/20' : 'border-gray-900 bg-gray-900/50 text-gray-300'
+                      }`}
                     >
-                      <div className="absolute top-0 right-0 bg-[#e21a22] text-[8px] font-black tracking-widest text-white px-2 py-0.5 uppercase rounded-bl">
-                        RECOMMENDED
+                      <div className="absolute top-0 right-0 bg-red-600 text-[7px] font-black tracking-widest text-white px-2 py-0.5 uppercase rounded-bl">RECOMMENDED</div>
+                      <div className="flex justify-between items-center mb-0.5 mt-1">
+                        <span className="text-xs font-extrabold uppercase">Premium OLED</span>
+                        <span className="text-sm font-black text-red-500">{currentModelScreenEntry.oled}</span>
                       </div>
-                      <div className="flex justify-between items-center mb-1 mt-1">
-                        <span className="text-sm font-black uppercase">Premium OLED Screen</span>
-                        <span className="text-sm font-black text-[#e21a22]">{currentModelScreenEntry.oled}</span>
-                      </div>
-                      <p className="text-[10px] leading-tight text-gray-400">
-                        Matches your original phone specifications. High brightness, deep true blacks, vibrant colors, and optimal battery efficiency.
-                      </p>
+                      <p className="text-[9px] text-gray-400 leading-tight">Original-grade colors, deep contrast, battery efficient.</p>
                     </button>
                   )}
 
-                  {/* Original 1-on-1 Option */}
                   {currentModelScreenEntry.oem && (
                     <button
-                      type="button"
                       onClick={() => setSelectedTier('oem')}
-                      className={`w-full p-4 rounded-xl border-2 text-left transition-all ${selectedTier === 'oem' ? 'border-[#e21a22] bg-[#111] text-white shadow-lg shadow-red-950/20' : 'border-gray-800 bg-black/50 text-gray-400 hover:border-gray-700'}`}
+                      className={`w-full p-4 rounded-xl border text-left transition-all ${
+                        selectedTier === 'oem' ? 'border-red-600 bg-red-950/20' : 'border-gray-900 bg-gray-900/50 text-gray-300'
+                      }`}
                     >
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-sm font-black uppercase">Original 1-on-1 Spec</span>
-                        <span className="text-sm font-black text-[#e21a22]">{currentModelScreenEntry.oem}</span>
+                      <div className="flex justify-between items-center mb-0.5">
+                        <span className="text-xs font-extrabold uppercase">Original 1-on-1 Spec</span>
+                        <span className="text-sm font-black text-red-500">{currentModelScreenEntry.oem}</span>
                       </div>
-                      <p className="text-[10px] leading-tight text-gray-400">
-                        Factory original-grade part. Maximum screen durability, premium glass structure, and flawless touch sensitivity.
-                      </p>
+                      <p className="text-[9px] text-gray-400 leading-tight">Factory original parts. Flawless glass structure and touch response.</p>
                     </button>
                   )}
                 </div>
               )}
 
-              <div className="bg-[#111] rounded-2xl p-6 text-white shadow-xl flex flex-col items-center relative overflow-hidden mb-6">
-                <span className="text-xs font-bold tracking-widest text-gray-400 mt-2">ESTIMATED PRICE</span>
-                <div className="text-6xl font-black tracking-tighter my-4">
-                  {estimatedPrice}
-                </div>
-                <p className="text-sm font-medium mb-1">Most repairs done in</p>
-                <p className="text-[#e21a22] font-bold mb-6">{selectedBrand === 'Other' ? 'for a custom quote!' : 'under 1 hour!'}</p>
-                <a href="tel:7134716760" onClick={() => {
-                  track('Quote Result Call Button Clicked', { price: estimatedPrice || 'N/A' });
-                  if (typeof window !== 'undefined' && (window as any).ttq) {
-                    (window as any).ttq.track('Contact', {}, { test_event_code: 'TEST35714' });
-                  }
-                }} className="w-full bg-[#e21a22] hover:bg-red-700 text-white font-bold py-4 rounded-xl text-lg flex items-center justify-center gap-2 transition-colors mb-3 shadow-md">
-                  <Phone className="w-5 h-5 fill-current" />
-                  CALL NOW TO BOOK
-                </a>
-              </div>
-              <button 
-                  onClick={() => setStep(2)}
-                  className="w-full bg-gray-200 text-gray-700 font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-opacity"
+              {/* Call booking CTA */}
+              <div className="space-y-3">
+                <a
+                  href="tel:7134716760"
+                  onClick={() => {
+                    track('Mobile Quote Result Call Button Clicked', { price: estimatedPrice || 'N/A' });
+                    if (typeof window !== 'undefined' && (window as any).ttq) {
+                      (window as any).ttq.track('Contact', {}, { test_event_code: 'TEST35714' });
+                    }
+                  }}
+                  className="w-full bg-[#e21a22] hover:bg-red-700 text-white font-bold py-4 rounded-xl text-md flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95"
                 >
-                  BACK TO ISSUES
+                  <Phone className="w-5 h-5 fill-current" />
+                  CALL TO BOOK REPAIR
+                </a>
+                
+                <button
+                  onClick={() => {
+                    setSelectedBrand('');
+                    setSelectedModel('');
+                    setSelectedIssue('');
+                    setStep(1);
+                  }}
+                  className="w-full bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white font-bold py-3.5 rounded-xl text-xs uppercase transition-all border border-gray-800"
+                >
+                  Get Another Quote
                 </button>
+              </div>
             </div>
           )}
 
-          {/* Security & Contact block */}
-          <div className="mt-6 pt-6 border-t border-gray-300">
-            <div className="flex items-center justify-center gap-2 text-xs font-medium text-gray-600 mb-4">
-              <ShieldCheck className="w-4 h-4" />
-              Your info is secure and will never be shared.
+        </div>
+      ) : (
+        /* ==================== TRADITIONAL DESKTOP WIDGET ==================== */
+        <div className="max-w-xl mx-auto px-4 py-8 animate-in fade-in duration-300">
+          
+          {/* Hero Section */}
+          <section className="relative overflow-hidden mb-6">
+            <div className="absolute top-0 right-0 w-full h-full opacity-30 pointer-events-none" style={{ background: 'radial-gradient(circle at top right, #e21a22 0%, transparent 60%)' }}></div>
+            
+            <div className="relative z-10 flex flex-col">
+              <div className="inline-block bg-[#e21a22] text-white font-black italic px-3 py-1 text-sm transform -skew-x-12 w-max mb-2">
+                <span className="transform skew-x-12 block">GET IT FIXED TODAY.</span>
+              </div>
+              <h1 className="text-5xl font-black italic uppercase leading-[0.9] tracking-tighter mb-3">
+                INSTANT QUOTE<br/>
+                <span className="text-[#e21a22]">IN SECONDS.</span>
+              </h1>
+              <div className="flex items-center gap-2 text-sm font-bold italic tracking-wide text-gray-200">
+                <span>FAST.</span>
+                <span>AFFORDABLE.</span>
+                <span>TRUSTED.</span>
+              </div>
+            </div>
+            
+            <div className="absolute -right-8 -bottom-4 w-48 h-64 pointer-events-none opacity-90 rotate-12">
+               <img src="https://images.unsplash.com/photo-1592839719941-8e2651039d01?w=400&q=80" alt="Cracked phone" className="rounded-[2rem] border-[6px] border-gray-400 shadow-2xl object-cover h-full w-full" style={{filter: 'grayscale(30%) brightness(0.9)'}} />
+            </div>
+          </section>
+
+          {/* Features Row */}
+          <section className="py-2 mb-6">
+            <div className="flex overflow-x-auto gap-3 pb-2 snap-x hide-scrollbar">
+              <div className="min-w-[110px] flex-shrink-0 border border-gray-800 rounded-xl p-3 flex flex-col items-center text-center snap-center bg-black/50">
+                <Timer className="w-8 h-8 text-[#e21a22] mb-2" />
+                <span className="font-black text-[11px] uppercase leading-tight mb-1">Same-Day<br/>Repairs</span>
+                <span className="text-[10px] text-gray-400">Walk in. Walk out.</span>
+              </div>
+              <div className="min-w-[110px] flex-shrink-0 border border-gray-800 rounded-xl p-3 flex flex-col items-center text-center snap-center bg-black/50">
+                <ShieldCheck className="w-8 h-8 text-[#e21a22] mb-2" />
+                <span className="font-black text-[11px] uppercase leading-tight mb-1">Lifetime<br/>Warranty*</span>
+                <span className="text-[10px] text-gray-400">We stand on<br/>our work.</span>
+              </div>
+              <div className="min-w-[110px] flex-shrink-0 border border-gray-800 rounded-xl p-3 flex flex-col items-center text-center snap-center bg-black/50">
+                <Tag className="w-8 h-8 text-[#e21a22] mb-2" />
+                <span className="font-black text-[11px] uppercase leading-tight mb-1">Fair Prices</span>
+                <span className="text-[10px] text-gray-400">No hidden<br/>fees.</span>
+              </div>
+              <div className="min-w-[110px] flex-shrink-0 border border-gray-800 rounded-xl p-3 flex flex-col items-center text-center snap-center bg-black/50">
+                <Clock className="w-8 h-8 text-[#e21a22] mb-2" />
+                <span className="font-black text-[11px] uppercase leading-tight mb-1">Most Repairs<br/>Under 1 Hour</span>
+                <span className="text-[10px] text-gray-400">Fast, reliable.</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Main Card */}
+          <div className="bg-[#f4f2ee] text-black rounded-2xl p-5 md:p-8 shadow-xl">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-black italic uppercase tracking-tight">
+                GET YOUR <span className="text-[#e21a22]">INSTANT QUOTE</span>
+              </h2>
+              <p className="text-sm text-gray-700 mt-1 font-medium">Just answer a few quick questions and see your price!</p>
             </div>
 
-            <div className="bg-white rounded-xl p-4 flex items-center gap-4 border border-gray-200 shadow-sm">
-              <div className="bg-[#d01017] w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0">
-                <Phone className="w-6 h-6 text-white fill-current" />
+            {/* Progress Bar */}
+            <div className="flex justify-between items-center mb-8 relative px-2">
+              <div className="absolute left-[15%] right-[15%] top-4 h-[2px] bg-gray-300 -z-10"></div>
+              <div className={`absolute left-[15%] top-4 h-[2px] bg-[#e21a22] -z-10 transition-all duration-500`} style={{ width: step === 1 ? '0%' : step === 2 ? '50%' : '70%' }}></div>
+
+              <div className="flex flex-col items-center w-1/3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shadow-sm border-2 border-[#f4f2ee] ${step >= 1 ? 'bg-[#e21a22] text-white' : 'bg-gray-300 text-white'}`}>1</div>
+                <span className={`mt-2 font-bold text-[9px] tracking-wider text-center uppercase ${step >= 1 ? 'text-[#e21a22]' : 'text-gray-400'}`}>Select Device</span>
               </div>
-              <div className="flex-1">
-                <h4 className="font-black text-[13px] tracking-wide mb-1">PREFER TO TALK TO US?</h4>
-                <p className="text-[11px] text-gray-600 mb-2 leading-tight">Call or text us and we'll<br/>help you right away!</p>
+              <div className="flex flex-col items-center w-1/3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shadow-sm border-2 border-[#f4f2ee] ${step >= 2 ? 'bg-[#e21a22] text-white' : 'bg-gray-300 text-white'}`}>2</div>
+                <span className={`mt-2 font-bold text-[9px] tracking-wider text-center uppercase ${step >= 2 ? 'text-gray-500' : 'text-gray-400'}`}>Select Issue</span>
               </div>
-              <div className="flex-shrink-0">
-                 <a href="tel:7134716760" onClick={() => {
-                  track('Footer Call Button Clicked');
-                  if (typeof window !== 'undefined' && (window as any).ttq) {
-                    (window as any).ttq.track('Contact', {}, { test_event_code: 'TEST35714' });
-                  }
-                }} className="block w-full border border-[#d01017] text-[#d01017] text-center font-bold py-2 px-3 rounded-md text-[11px] leading-tight hover:bg-red-50">
-                  CALL / TEXT<br/><span className="text-[13px]">(713) 471-6760</span>
-                </a>
+              <div className="flex flex-col items-center w-1/3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shadow-sm border-2 border-[#f4f2ee] ${step >= 3 ? 'bg-[#e21a22] text-white' : 'bg-gray-300 text-white'}`}>3</div>
+                <span className={`mt-2 font-bold text-[9px] tracking-wider text-center uppercase ${step >= 3 ? 'text-gray-500' : 'text-gray-400'}`}>Get Quote</span>
               </div>
             </div>
+
+            {/* Step Content */}
+            {step === 1 && (
+              <div className="animate-in fade-in duration-300">
+                <h3 className="font-bold uppercase tracking-wide mb-4 text-[15px]">1. SELECT YOUR DEVICE</h3>
+                <div className="space-y-3">
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500">
+                      <Smartphone className="w-6 h-6 stroke-[1.5]" />
+                    </div>
+                    <select 
+                      className="w-full appearance-none bg-white border border-gray-200 rounded-xl py-4 pl-12 pr-10 font-bold text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#e21a22]"
+                      value={selectedBrand}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedBrand(val);
+                        if (val === 'Other') {
+                          setSelectedModel('Unknown / Other Model');
+                        } else {
+                          setSelectedModel('');
+                        }
+                      }}
+                    >
+                      <option value="" disabled>Select Device Type</option>
+                      {availableBrands.map(brand => (
+                        <option key={brand} value={brand}>{brand}</option>
+                      ))}
+                    </select>
+                    <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-gray-800">
+                      <ChevronDown className="w-5 h-5" />
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500">
+                      <Smartphone className="w-6 h-6 stroke-[1.5]" />
+                    </div>
+                    <select 
+                      className="w-full appearance-none bg-white border border-gray-200 rounded-xl py-4 pl-12 pr-10 font-bold text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#e21a22] disabled:opacity-50 disabled:bg-gray-50"
+                      value={selectedModel}
+                      onChange={(e) => setSelectedModel(e.target.value)}
+                      disabled={!selectedBrand}
+                    >
+                      <option value="" disabled>Select Make & Model</option>
+                      {availableModels.map(model => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
+                    </select>
+                    <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-gray-800">
+                      <ChevronDown className="w-5 h-5" />
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={handleNext}
+                    disabled={!selectedBrand || !selectedModel}
+                    className="w-full bg-[#d01017] text-white font-bold py-4 rounded-xl mt-4 flex items-center justify-center gap-2 disabled:opacity-50 transition-opacity tracking-wide"
+                  >
+                    NEXT: SELECT ISSUE <ArrowRight className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div className="animate-in fade-in duration-300">
+                 <h3 className="font-bold uppercase tracking-wide mb-4 text-[15px]">2. WHAT'S THE ISSUE?</h3>
+                 <div className="grid grid-cols-2 gap-3 mb-4">
+                   {[
+                     { id: 'Screen', label: 'Cracked Screen' },
+                     { id: 'Battery', label: 'Battery Issues' },
+                     { id: 'Charging Port', label: 'Charging Port' },
+                     { id: 'Back Camera', label: 'Camera Issues' },
+                     { id: 'Earpiece / Loud Speaker', label: 'Speaker Issues' },
+                     { id: 'Other', label: 'Other Issue' }
+                   ].map(issue => (
+                     <button
+                      key={issue.id}
+                      onClick={() => {
+                        setSelectedIssue(issue.id);
+                        setTimeout(() => setStep(3), 150);
+                      }}
+                      className={`p-4 rounded-xl border-2 text-center transition-all ${selectedIssue === issue.id ? 'border-[#e21a22] bg-red-50 text-gray-900' : 'border-gray-200 bg-white text-gray-600'}`}
+                     >
+                       <span className="text-sm font-bold block">{issue.label}</span>
+                     </button>
+                   ))}
+                 </div>
+                 <button 
+                    onClick={() => setStep(1)}
+                    className="w-full bg-gray-200 text-gray-700 font-bold py-4 rounded-xl mt-2 flex items-center justify-center gap-2 transition-opacity"
+                  >
+                    BACK
+                  </button>
+              </div>
+            )}
+
+            {step === 3 && (
+              <div className="animate-in fade-in duration-300 text-center">
+                <h3 className="font-bold uppercase tracking-wide mb-6 text-[15px]">3. YOUR INSTANT QUOTE</h3>
+                
+                {hasScreenTiers && currentModelScreenEntry && (
+                  <div className="space-y-3 mb-6 text-left">
+                    <span className="block text-[11px] font-black tracking-wider text-gray-400 uppercase text-center mb-2">SELECT YOUR SCREEN QUALITY</span>
+                    
+                    {currentModelScreenEntry.lcd && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTier('lcd')}
+                        className={`w-full p-4 rounded-xl border-2 text-left transition-all ${selectedTier === 'lcd' ? 'border-[#e21a22] bg-[#111] text-white shadow-lg' : 'border-gray-800 bg-black/50 text-gray-400 hover:border-gray-700'}`}
+                      >
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-sm font-black uppercase">Standard LCD Screen</span>
+                          <span className="text-sm font-black text-[#e21a22]">{currentModelScreenEntry.lcd}</span>
+                        </div>
+                        <p className="text-[10px] leading-tight text-gray-400">
+                          Budget-friendly LCD display replacement. Suitable for secondary phones or general budgets.
+                        </p>
+                      </button>
+                    )}
+
+                    {currentModelScreenEntry.oled && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTier('oled')}
+                        className={`w-full p-4 rounded-xl border-2 text-left transition-all relative overflow-hidden ${selectedTier === 'oled' ? 'border-[#e21a22] bg-[#111] text-white shadow-lg' : 'border-gray-800 bg-black/50 text-gray-400 hover:border-gray-700'}`}
+                      >
+                        <div className="absolute top-0 right-0 bg-[#e21a22] text-[8px] font-black tracking-widest text-white px-2 py-0.5 uppercase rounded-bl">
+                          RECOMMENDED
+                        </div>
+                        <div className="flex justify-between items-center mb-1 mt-1">
+                          <span className="text-sm font-black uppercase">Premium OLED Screen</span>
+                          <span className="text-sm font-black text-[#e21a22]">{currentModelScreenEntry.oled}</span>
+                        </div>
+                        <p className="text-[10px] leading-tight text-gray-400">
+                          Matches original specifications. High brightness, deep true blacks, vibrant colors, and optimal battery efficiency.
+                        </p>
+                      </button>
+                    )}
+
+                    {currentModelScreenEntry.oem && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTier('oem')}
+                        className={`w-full p-4 rounded-xl border-2 text-left transition-all ${selectedTier === 'oem' ? 'border-[#e21a22] bg-[#111] text-white shadow-lg' : 'border-gray-800 bg-black/50 text-gray-400 hover:border-gray-700'}`}
+                      >
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-sm font-black uppercase">Original 1-on-1 Spec</span>
+                          <span className="text-sm font-black text-[#e21a22]">{currentModelScreenEntry.oem}</span>
+                        </div>
+                        <p className="text-[10px] leading-tight text-gray-400">
+                          Factory original-grade part. Maximum screen durability and flawless touch sensitivity.
+                        </p>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div className="bg-[#111] rounded-2xl p-6 text-white shadow-xl flex flex-col items-center relative overflow-hidden mb-6">
+                  <span className="text-xs font-bold tracking-widest text-gray-400 mt-2">ESTIMATED PRICE</span>
+                  <div className="text-6xl font-black tracking-tighter my-4">
+                    {estimatedPrice}
+                  </div>
+                  <p className="text-sm font-medium mb-1">Most repairs done in</p>
+                  <p className="text-[#e21a22] font-bold mb-6">{selectedBrand === 'Other' ? 'for a custom quote!' : 'under 1 hour!'}</p>
+                  <a href="tel:7134716760" onClick={() => {
+                    track('Quote Result Call Button Clicked', { price: estimatedPrice || 'N/A' });
+                    if (typeof window !== 'undefined' && (window as any).ttq) {
+                      (window as any).ttq.track('Contact', {}, { test_event_code: 'TEST35714' });
+                    }
+                  }} className="w-full bg-[#e21a22] hover:bg-red-700 text-white font-bold py-4 rounded-xl text-lg flex items-center justify-center gap-2 transition-colors mb-3 shadow-md">
+                    <Phone className="w-5 h-5 fill-current" />
+                    CALL NOW TO BOOK
+                  </a>
+                </div>
+                <button 
+                    onClick={() => setStep(2)}
+                    className="w-full bg-gray-200 text-gray-700 font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-opacity"
+                  >
+                    BACK TO ISSUES
+                  </button>
+              </div>
+            )}
+
+            {/* Security Contact Footer */}
+            <div className="mt-6 pt-6 border-t border-gray-300">
+              <div className="flex items-center justify-center gap-2 text-xs font-medium text-gray-600 mb-4">
+                <ShieldCheck className="w-4 h-4" />
+                Your info is secure and will never be shared.
+              </div>
+
+              <div className="bg-white rounded-xl p-4 flex items-center gap-4 border border-gray-200 shadow-sm">
+                <div className="bg-[#d01017] w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Phone className="w-6 h-6 text-white fill-current" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-black text-[13px] tracking-wide mb-1">PREFER TO TALK TO US?</h4>
+                  <p className="text-[11px] text-gray-600 mb-2 leading-tight">Call or text us and we'll help you right away!</p>
+                </div>
+                <div className="flex-shrink-0">
+                   <a href="tel:7134716760" onClick={() => {
+                    track('Footer Call Button Clicked');
+                    if (typeof window !== 'undefined' && (window as any).ttq) {
+                      (window as any).ttq.track('Contact', {}, { test_event_code: 'TEST35714' });
+                    }
+                  }} className="block w-full border border-[#d01017] text-[#d01017] text-center font-bold py-2 px-3 rounded-md text-[11px] leading-tight hover:bg-red-50">
+                    CALL / TEXT<br/><span className="text-[13px]">(713) 471-6760</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+
           </div>
+
         </div>
-      </section>
+      )}
 
       {/* Bottom Navigation */}
       {!isInternal && (
@@ -491,7 +778,6 @@ const InstantQuoteWidget: React.FC<InstantQuoteWidgetProps> = ({ isInternal = fa
         </nav>
       )}
 
-      {/* Style for hiding scrollbar */}
       <style>{`
         .hide-scrollbar::-webkit-scrollbar {
           display: none;
