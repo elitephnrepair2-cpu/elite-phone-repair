@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useDeferredValue } from 'react';
+import React, { useState, useMemo, useDeferredValue, useEffect } from 'react';
 import type { Customer, RepairTicket, FullRepairTicket } from '../types';
 import { formatPhoneInput, isValidPhoneNumber } from '../services/phoneValidator';
+import { Smartphone, Monitor } from 'lucide-react';
 
 interface FrontDeskPortalProps {
   customers: Customer[];
@@ -46,6 +47,14 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
   const [filterMode, setFilterMode] = useState<'all' | 'today' | 'active_tickets'>('all');
   const [displayLimit, setDisplayLimit] = useState(35);
   const [showQuickAddModal, setShowQuickAddModal] = useState(false);
+  const [crmViewMode, setCrmViewMode] = useState<'desktop' | 'mobile'>('mobile');
+
+  // Auto-detect layout based on screen width on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setCrmViewMode(window.innerWidth < 1024 ? 'mobile' : 'desktop');
+    }
+  }, []);
 
   // Quick Customer Intake Form State
   const [newCustName, setNewCustName] = useState('');
@@ -247,11 +256,43 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
         </div>
       </div>
 
+      {/* View Mode Toggle Pill */}
+      <div className="flex justify-end pr-1">
+        <div className="bg-slate-200/60 dark:bg-slate-800/80 p-0.5 rounded-full flex items-center border border-slate-300 dark:border-slate-700 shadow-inner">
+          <button
+            onClick={() => setCrmViewMode('mobile')}
+            className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-wider transition-all flex items-center gap-1.5 ${
+              crmViewMode === 'mobile'
+                ? 'bg-red-600 text-white shadow-sm'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+            }`}
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            MOBILE FLOW
+          </button>
+          <button
+            onClick={() => setCrmViewMode('desktop')}
+            className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-wider transition-all flex items-center gap-1.5 ${
+              crmViewMode === 'desktop'
+                ? 'bg-red-600 text-white shadow-sm'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+            }`}
+          >
+            <Monitor className="w-3.5 h-3.5" />
+            DESKTOP VIEW
+          </button>
+        </div>
+      </div>
+
       {/* Main Workstation Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* Left Column: Customer Directory & Search Results */}
-        <div className="lg:col-span-5 bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col h-[calc(100vh-16rem)]">
+        <div 
+          className={`lg:col-span-5 bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col h-[calc(100vh-16rem)] ${
+            crmViewMode === 'mobile' && selectedCustomerId !== null ? 'hidden lg:flex' : 'flex'
+          }`}
+        >
           <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700">
             <div>
               <h3 className="font-extrabold text-slate-900 dark:text-white text-base">Customer Directory</h3>
@@ -358,10 +399,24 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
         </div>
 
         {/* Right Column: Customer Workstation Command Center */}
-        <div className="lg:col-span-7 space-y-6">
+        <div 
+          className={`lg:col-span-7 space-y-6 ${
+            crmViewMode === 'mobile' && selectedCustomerId === null ? 'hidden lg:block' : 'block'
+          }`}
+        >
           {selectedCustomer ? (
             /* Selected Customer Command Card */
             <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-lg border border-slate-200 dark:border-slate-700 space-y-6 animate-in fade-in-50 duration-200">
+              
+              {/* Back button on mobile view */}
+              {crmViewMode === 'mobile' && (
+                <button
+                  onClick={() => onSelectCustomer(null)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-xl text-xs font-bold transition-all border border-slate-200 dark:border-slate-600 mb-2 w-max"
+                >
+                  ← Back to Directory
+                </button>
+              )}
               
               {/* Customer Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-700">
