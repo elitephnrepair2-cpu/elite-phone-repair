@@ -58,6 +58,8 @@ serve(async (req) => {
       console.error('Failed to log inbound SMS to sms_messages:', logError)
     }
 
+    let twimlResponseText = ''
+
     // 2. Check for opt-out keyword (STOP)
     const isOptOut = body.trim().toLowerCase() === 'stop'
 
@@ -91,10 +93,62 @@ serve(async (req) => {
       }
     }
 
-    // 3. [AUTOMATION] — Reply nudge for condition nodes waiting on "has_replied"
-    // If this customer has an active enrollment currently on a condition node,
-    // set next_execution_at to now so the scheduler processes it immediately.
-    // This does NOT change any other behavior; it is purely a read+update on automation_enrollments.
+    // 3. APPOINTMENT CONFIRMATION / CANCELLATION REPLY HANDLING
+    const cleanBody = body.trim().toLowerCase()
+    const isConfirmReply = ['c', 'confirm', 'confirmed', 'yes', 'y', 'ok'].includes(cleanBody)
+    const isCancelReply = ['cancel', 'cancelled', 'no'].includes(cleanBody)
+
+    if (isConfirmReply) {
+      const { data: appt } = await supabaseClient
+        .from('appointments')
+        .select('*')
+        .or(`phone.eq."${normalizedPhone}",phone.eq."${formattedPhone}",phone.eq."${dashedPhone}",phone.eq."${plusOnePhone}"`)
+        .in('status', ['scheduled', 'pending'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (appt) {
+        console.log(`Confirming appointment ${appt.id} for phone ${normalizedPhone}`)
+        await supabaseClient
+          .from('appointments')
+          .update({ status: 'confirmed' })
+          .eq('id', appt.id)
+
+        twimlResponseText = "Thanks! Your appointment with Elite Phone Repair has been confirmed. We look forward to seeing you!"
+      }
+    } else if (isCancelReply) {
+      const { data: appt } = await supabaseClient
+        .from('appointments')
+        .select('*')
+        .or(`phone.eq."${normalizedPhone}",phone.eq."${formattedPhone}",phone.eq."${dashedPhone}",phone.eq."${plusOnePhone}"`)
+        .in('status', ['scheduled', 'pending', 'confirmed'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (appt) {
+        console.log(`Cancelling appointment ${appt.id} for phone ${normalizedPhone}`)
+        await supabaseClient
+          .from('appointments')
+          .update({ 
+            status: 'cancelled',
+            cancelled_at: new Date().toISOString()
+          })
+          .eq('id', appt.id)
+
+        // Cancel pending SMS jobs for this appointment
+        await supabaseClient
+          .from('appointment_sms_jobs')
+          .update({ status: 'canceled', skip_reason: 'Customer replied CANCEL' })
+          .eq('appointment_id', appt.id)
+          .eq('status', 'pending')
+
+        twimlResponseText = "Your appointment has been cancelled. Reply here or call us anytime if you would like to reschedule!"
+      }
+    }
+
+    // 4. [AUTOMATION] — Reply nudge for condition nodes waiting on "has_replied"
     if (customer && !isOptOut) {
       try {
         const { data: activeEnrollments } = await supabaseClient
@@ -105,7 +159,6 @@ serve(async (req) => {
           .is('processing_locked_at', null)
 
         if (activeEnrollments && activeEnrollments.length > 0) {
-          // Check if any of the current nodes are condition nodes
           const nodeIds = activeEnrollments.map((e: any) => e.current_node_id).filter(Boolean)
           if (nodeIds.length > 0) {
             const { data: conditionNodes } = await supabaseClient
@@ -131,13 +184,14 @@ serve(async (req) => {
           }
         }
       } catch (nudgeErr) {
-        // Never let automation nudge logic interrupt SMS ingestion
         console.error('Automation reply nudge error (non-critical):', nudgeErr)
       }
     }
 
-    // Return empty TwiML response to Twilio
-    const twiml = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
+    // Return TwiML response to Twilio (with auto-reply text if applicable)
+    const twiml = twimlResponseText 
+      ? `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${twimlResponseText}</Message></Response>`
+      : '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
 
     return new Response(twiml, {
       status: 200,

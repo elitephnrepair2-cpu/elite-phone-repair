@@ -300,7 +300,7 @@ export async function triggerAppointmentSmsProcessor(): Promise<{ success: boole
       // Render Template
       let template = '';
       if (job.job_type === 'immediate_confirmation') {
-        template = settings?.template_immediate_confirmation || 'Your appointment with Elite Phone Repair is confirmed for {{appointment_date}} at {{appointment_time}}.';
+        template = settings?.template_immediate_confirmation || 'Your appointment with Elite Phone Repair is confirmed for {{appointment_date}} at {{appointment_time}}.\nDevice: {{device}}\nRepair: {{repair_issue}}\nLocation: {{location_address}}\n\nReply C to confirm your appointment, or reply CANCEL to cancel.';
       } else if (job.job_type === 'reminder_24h') {
         template = settings?.template_reminder_24h || 'Reminder: You’re scheduled with Elite Phone Repair tomorrow at {{appointment_time}}.';
       } else if (job.job_type === 'reminder_2h') {
@@ -439,3 +439,92 @@ export async function fetchAppointmentSmsJobs(appointmentId: string): Promise<Ap
     return [];
   }
 }
+
+/**
+ * Processes inbound customer SMS reply for appointment confirmations ('C', 'CONFIRM', 'YES', 'CANCEL').
+ */
+export async function processInboundAppointmentReply(
+  fromPhone: string,
+  messageBody: string
+): Promise<{ handled: boolean; action?: 'confirmed' | 'cancelled'; replyMessage?: string }> {
+  try {
+    const cleanBody = (messageBody || '').trim().toLowerCase();
+    const digitsOnly = fromPhone.replace(/\D/g, '');
+    const normalizedPhone = digitsOnly.length === 11 && digitsOnly.startsWith('1')
+      ? digitsOnly.substring(1)
+      : digitsOnly;
+
+    const formattedPhone = normalizedPhone.length === 10 
+      ? `(${normalizedPhone.slice(0, 3)}) ${normalizedPhone.slice(3, 6)}-${normalizedPhone.slice(6)}`
+      : normalizedPhone;
+    const dashedPhone = normalizedPhone.length === 10
+      ? `${normalizedPhone.slice(0, 3)}-${normalizedPhone.slice(3, 6)}-${normalizedPhone.slice(6)}`
+      : normalizedPhone;
+    const plusOnePhone = `+1${normalizedPhone}`;
+
+    const isConfirmReply = ['c', 'confirm', 'confirmed', 'yes', 'y', 'ok'].includes(cleanBody);
+    const isCancelReply = ['cancel', 'cancelled', 'no'].includes(cleanBody);
+
+    if (!isConfirmReply && !isCancelReply) {
+      return { handled: false };
+    }
+
+    if (isConfirmReply) {
+      // Find latest pending or scheduled appointment for this phone number
+      const { data: appt } = await supabase
+        .from('appointments')
+        .select('*')
+        .or(`phone.eq."${normalizedPhone}",phone.eq."${formattedPhone}",phone.eq."${dashedPhone}",phone.eq."${plusOnePhone}"`)
+        .in('status', ['scheduled', 'pending'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (appt) {
+        await supabase
+          .from('appointments')
+          .update({ status: 'confirmed' })
+          .eq('id', appt.id);
+
+        return {
+          handled: true,
+          action: 'confirmed',
+          replyMessage: "Thanks! Your appointment with Elite Phone Repair is confirmed. We look forward to seeing you!"
+        };
+      }
+    }
+
+    if (isCancelReply) {
+      // Find latest active appointment for this phone number
+      const { data: appt } = await supabase
+        .from('appointments')
+        .select('*')
+        .or(`phone.eq."${normalizedPhone}",phone.eq."${formattedPhone}",phone.eq."${dashedPhone}",phone.eq."${plusOnePhone}"`)
+        .in('status', ['scheduled', 'pending', 'confirmed'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (appt) {
+        await supabase
+          .from('appointments')
+          .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+          .eq('id', appt.id);
+
+        await cancelAppointmentSmsJobs(appt.id, 'Customer replied CANCEL');
+
+        return {
+          handled: true,
+          action: 'cancelled',
+          replyMessage: "Your appointment has been cancelled. Reply here or call us anytime if you would like to reschedule!"
+        };
+      }
+    }
+
+    return { handled: false };
+  } catch (err) {
+    console.error("Error processing inbound appointment reply:", err);
+    return { handled: false };
+  }
+}
+
