@@ -26,7 +26,7 @@ import QuoteForm from './components/QuoteForm';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { REPAIR_PRICES } from './constants/prices';
 import { sendSmsIfAllowed } from './services/smsService';
-import { scheduleAppointmentSmsSequence, cancelAppointmentSmsJobs, scheduleMissedAppointmentSms } from './services/appointmentSmsService';
+import { scheduleAppointmentSmsSequence, cancelAppointmentSmsJobs, scheduleMissedAppointmentSms, processInboundAppointmentReply } from './services/appointmentSmsService';
 import { StaffUser, signOutStaff } from './services/authService';
 import { StaffLoginView } from './components/StaffLoginView';
 
@@ -277,7 +277,12 @@ const App: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'parts_orders' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sms_messages' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sms_messages' }, async (payload: any) => {
+        if (payload?.new && payload.new.direction === 'inbound' && payload.new.from_phone && payload.new.content) {
+          await processInboundAppointmentReply(payload.new.from_phone, payload.new.content);
+        }
+        fetchData();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'quotes' }, () => fetchData())
       .subscribe();
 
