@@ -33,6 +33,7 @@ import { StaffLoginView } from './components/StaffLoginView';
 const DEFAULT_SETTINGS: ShopSettings = {
   businessName: 'Elite Phone Repair',
   address: '2215 Calder Ave STE 201, Beaumont, TX 77701',
+  address_houston: 'Houston Store Address',
   phone: '(409) 123-4567',
   warrantyTerms: 'Thank you for your business! Please keep this ticket for your records. A technician will contact you shortly with an update.',
   kioskPassword: '1271',
@@ -686,7 +687,9 @@ const App: React.FC = () => {
       }
     }
 
-    const locationAddress = settings.address || 'our shop';
+    const locationAddress = data.location === 'Houston'
+      ? (settings.address_houston || 'Houston Location')
+      : (settings.address || '2215 Calder Ave STE 201, Beaumont, TX 77701');
 
     const { data: insertedAppt, error } = await supabase
       .from('appointments')

@@ -859,6 +859,7 @@ export type PartsOrder = Database['public']['Tables']['parts_orders']['Row'];
 export interface ShopSettings {
   businessName: string;
   address: string;
+  address_houston?: string;
   phone: string;
   warrantyTerms: string;
   kioskPassword: string;

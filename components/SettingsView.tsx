@@ -436,13 +436,23 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Shop Address</label>
+              <label className="block text-sm font-bold text-slate-700 mb-2">Beaumont Shop Address</label>
               <input
                 name="address"
                 value={form.address}
                 onChange={handleChange}
                 className={inputClasses}
-                placeholder="2215 Calder Ave STE 201..."
+                placeholder="2215 Calder Ave STE 201, Beaumont TX 77701"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-bold text-slate-700 mb-2">Houston Shop Address</label>
+              <input
+                name="address_houston"
+                value={form.address_houston || ''}
+                onChange={handleChange}
+                className={inputClasses}
+                placeholder="Enter Houston Store Street Address"
               />
             </div>
           </div>
