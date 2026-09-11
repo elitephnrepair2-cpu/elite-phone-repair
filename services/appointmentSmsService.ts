@@ -300,7 +300,7 @@ export async function triggerAppointmentSmsProcessor(): Promise<{ success: boole
       // Render Template
       let template = '';
       if (job.job_type === 'immediate_confirmation') {
-        template = settings?.template_immediate_confirmation || 'Your appointment with Elite Phone Repair is set for {{appointment_date}} at {{appointment_time}}.\nDevice: {{device}}\nRepair: {{repair_issue}}\nLocation: {{location_address}}\n\nReply YES to confirm your appointment, or reply CANCEL to cancel.';
+        template = settings?.template_immediate_confirmation || 'Your appointment with Elite Phone Repair is set for {{appointment_date}} at {{appointment_time}}.\nDevice: {{device}}\nRepair: {{repair_issue}}\nLocation: {{location_address}}\n\nReply YES to confirm your appointment, or reply NO to cancel.';
       } else if (job.job_type === 'reminder_24h') {
         template = settings?.template_reminder_24h || 'Reminder: You’re scheduled with Elite Phone Repair tomorrow at {{appointment_time}}.';
       } else if (job.job_type === 'reminder_2h') {

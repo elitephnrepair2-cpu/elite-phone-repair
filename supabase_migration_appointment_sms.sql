@@ -55,7 +55,7 @@ Device: {{device}}
 Repair: {{repair_issue}}
 Location: {{location_address}}
 
-Reply YES to confirm your appointment, or reply CANCEL to cancel.',
+Reply YES to confirm your appointment, or reply NO to cancel.',
   template_reminder_24h TEXT DEFAULT 'Reminder: You’re scheduled with Elite Phone Repair tomorrow at {{appointment_time}} for your {{device}}.
 Location: {{location_address}}
 Need to reschedule? Reply here and let us know.',
