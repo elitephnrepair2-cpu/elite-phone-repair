@@ -60,8 +60,10 @@ serve(async (req) => {
 
     let twimlResponseText = ''
 
-    // 2. Check for opt-out keyword (STOP)
-    const isOptOut = body.trim().toLowerCase() === 'stop'
+    // 2. Check for opt-out keyword (STOP) or opt-in keyword (START / UNSTOP)
+    const cleanBodyStr = body.trim().toLowerCase()
+    const isOptOut = cleanBodyStr === 'stop'
+    const isOptIn = ['start', 'unstop'].includes(cleanBodyStr)
 
     if (isOptOut) {
       console.log(`Opt-out keyword detected from ${from}. Updating consent status for all matching customer records.`)
@@ -75,7 +77,7 @@ serve(async (req) => {
           revoked_reason: 'Customer replied STOP',
           consent_source: 'twilio_webhook'
         })
-        .or(`phone.eq.${normalizedPhone},phone.eq.${formattedPhone},phone.eq.${dashedPhone},phone.eq.${plusOnePhone},alt_phone.eq.${normalizedPhone},alt_phone.eq.${formattedPhone}`)
+        .or(`phone.eq."${normalizedPhone}",phone.eq."${formattedPhone}",phone.eq."${dashedPhone}",phone.eq."${plusOnePhone}"`)
 
       // Log consent event
       if (customer) {
@@ -91,6 +93,37 @@ serve(async (req) => {
             notes: { body }
           })
       }
+
+      twimlResponseText = "You have been unsubscribed from Elite Phone Repair SMS notifications. Reply START to resubscribe anytime."
+    } else if (isOptIn) {
+      console.log(`Opt-in keyword detected from ${from}. Restoring consent status.`)
+
+      await supabaseClient
+        .from('customers')
+        .update({
+          marketing_sms_consent: true,
+          transactional_sms_consent: true,
+          revoked_at: null,
+          revoked_reason: null,
+          consent_source: 'twilio_webhook_start'
+        })
+        .or(`phone.eq."${normalizedPhone}",phone.eq."${formattedPhone}",phone.eq."${dashedPhone}",phone.eq."${plusOnePhone}"`)
+
+      if (customer) {
+        await supabaseClient
+          .from('sms_consent_events')
+          .insert({
+            customer_id: customer.id,
+            phone: normalizedPhone,
+            consent_type: 'opt-in-all',
+            status: true,
+            source: 'twilio_webhook',
+            message_sid: messageSid,
+            notes: { body }
+          })
+      }
+
+      twimlResponseText = "You have successfully resubscribed to Elite Phone Repair SMS notifications. Welcome back!"
     }
 
     // 3. APPOINTMENT CONFIRMATION / CANCELLATION REPLY HANDLING

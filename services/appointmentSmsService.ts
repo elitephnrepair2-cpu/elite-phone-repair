@@ -278,10 +278,10 @@ export async function triggerAppointmentSmsProcessor(): Promise<{ success: boole
           .select('*')
           .eq('id', job.customer_id)
           .maybeSingle();
-        if (cust?.transactional_sms_consent === false) {
+        if (cust?.transactional_sms_consent === false && cust?.revoked_reason === 'Customer replied STOP') {
           await supabase
             .from('appointment_sms_jobs')
-            .update({ status: 'skipped', skip_reason: 'Customer opted out of SMS' })
+            .update({ status: 'skipped', skip_reason: 'Customer opted out of all SMS via STOP' })
             .eq('id', job.id);
           continue;
         }
