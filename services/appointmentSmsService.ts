@@ -66,15 +66,24 @@ export function renderAppointmentTemplate(
  */
 export async function getAppointmentSmsSettings(locationName: string = 'Beaumont'): Promise<AppointmentSmsSettings | null> {
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('appointment_sms_settings')
       .select('*')
       .eq('location', locationName)
       .maybeSingle();
 
+    if (!data) {
+      // Fallback to first available location settings (e.g. Beaumont)
+      const { data: fallbackData } = await supabase
+        .from('appointment_sms_settings')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+      data = fallbackData;
+    }
+
     if (error) {
       console.error("Failed to fetch appointment_sms_settings:", error);
-      return null;
     }
     return data;
   } catch (err) {
@@ -303,8 +312,8 @@ export async function triggerAppointmentSmsProcessor(): Promise<{ success: boole
       const locationAddress = appt.location_address || 'our shop';
       const renderedMessage = renderAppointmentTemplate(template, appt, locationAddress);
 
-      // Check Dry Run Mode (Default is TRUE unless explicitly set false)
-      const isDryRun = settings?.dry_run !== false;
+      // Check Dry Run Mode (Only true if explicitly set to true in settings)
+      const isDryRun = settings ? settings.dry_run === true : false;
 
       if (isDryRun) {
         await supabase
