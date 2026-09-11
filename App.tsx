@@ -1069,7 +1069,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col font-sans text-slate-900">
+    <div className="min-h-screen flex flex-col font-sans text-slate-900 w-full max-w-full overflow-x-hidden relative">
       {view !== 'kiosk' && view !== 'kiosk_login' && activeStaff && (
         <Header
           currentView={view}
@@ -1096,7 +1096,7 @@ const App: React.FC = () => {
           }}
         />
       )}
-      <main className={`flex-grow ${(view === 'kiosk' || view === 'kiosk_login') ? 'flex items-center justify-center bg-slate-900 min-h-screen' : view === 'quote_widget' ? 'min-h-screen bg-[#f4f2ee]' : 'container mx-auto px-4 py-8'}`}>
+      <main className={`flex-grow w-full max-w-full overflow-x-hidden ${(view === 'kiosk' || view === 'kiosk_login') ? 'flex items-center justify-center bg-slate-900 min-h-screen' : view === 'quote_widget' ? 'min-h-screen bg-[#f4f2ee]' : 'container mx-auto px-4 py-8'}`}>
         {renderContent()}
       </main>
       {view !== 'kiosk' && view !== 'kiosk_login' && view !== 'quote_widget' && <Footer businessName={settings.businessName} />}

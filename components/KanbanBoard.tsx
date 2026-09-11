@@ -51,7 +51,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tickets, onTicketStatusChange
     };
 
     return (
-        <div className="flex gap-4 overflow-x-auto pb-4 pt-2 -mx-4 px-4 custom-scrollbar min-h-[500px]">
+        <div className="flex gap-4 overflow-x-auto pb-4 pt-2 custom-scrollbar min-h-[500px] w-full max-w-full touch-pan-x">
             {STATUSES.map(status => (
                 <div
                     key={status}

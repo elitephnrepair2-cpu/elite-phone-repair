@@ -48,8 +48,8 @@ export const Header: React.FC<HeaderProps> = ({
 
     return (
         <>
-            <header className="bg-white dark:bg-slate-800 shadow-md print:hidden sticky top-0 z-40 transition-colors duration-200">
-                <div className="container mx-auto px-4 md:px-6 py-3.5 flex items-center justify-between gap-4">
+            <header className="bg-white dark:bg-slate-800 shadow-md print:hidden sticky top-0 z-40 transition-colors duration-200 w-full max-w-full overflow-x-hidden">
+                <div className="container mx-auto px-4 md:px-6 py-3.5 flex items-center justify-between gap-2 sm:gap-4 max-w-full">
                     {/* Left: Hamburger & Logo */}
                     <div className="flex items-center gap-3">
                         <button
