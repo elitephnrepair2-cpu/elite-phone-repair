@@ -196,6 +196,12 @@ export type Database = {
           time_window: string
           status: string
           location: string | null
+          sms_reminders_enabled?: boolean | null
+          version?: number | null
+          location_address?: string | null
+          cancelled_at?: string | null
+          arrived_at?: string | null
+          no_show_at?: string | null
         }
         Insert: {
           id?: string
@@ -209,6 +215,12 @@ export type Database = {
           time_window: string
           status?: string
           location?: string | null
+          sms_reminders_enabled?: boolean | null
+          version?: number | null
+          location_address?: string | null
+          cancelled_at?: string | null
+          arrived_at?: string | null
+          no_show_at?: string | null
         }
         Update: {
           id?: string
@@ -222,6 +234,129 @@ export type Database = {
           time_window?: string
           status?: string
           location?: string | null
+          sms_reminders_enabled?: boolean | null
+          version?: number | null
+          location_address?: string | null
+          cancelled_at?: string | null
+          arrived_at?: string | null
+          no_show_at?: string | null
+        }
+        Relationships: []
+      }
+      appointment_sms_jobs: {
+        Row: {
+          id: string
+          appointment_id: string
+          customer_id: string | null
+          appointment_version: number
+          job_type: 'immediate_confirmation' | 'reminder_24h' | 'reminder_2h' | 'missed_appointment'
+          scheduled_for: string
+          status: 'pending' | 'claimed' | 'sent' | 'failed' | 'skipped' | 'canceled' | 'uncertain'
+          skip_reason: string | null
+          error_message: string | null
+          provider_message_id: string | null
+          retry_count: number
+          claimed_at: string | null
+          sent_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          appointment_id: string
+          customer_id?: string | null
+          appointment_version?: number
+          job_type: 'immediate_confirmation' | 'reminder_24h' | 'reminder_2h' | 'missed_appointment'
+          scheduled_for: string
+          status?: 'pending' | 'claimed' | 'sent' | 'failed' | 'skipped' | 'canceled' | 'uncertain'
+          skip_reason?: string | null
+          error_message?: string | null
+          provider_message_id?: string | null
+          retry_count?: number
+          claimed_at?: string | null
+          sent_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          appointment_id?: string
+          customer_id?: string | null
+          appointment_version?: number
+          job_type?: 'immediate_confirmation' | 'reminder_24h' | 'reminder_2h' | 'missed_appointment'
+          scheduled_for?: string
+          status?: 'pending' | 'claimed' | 'sent' | 'failed' | 'skipped' | 'canceled' | 'uncertain'
+          skip_reason?: string | null
+          error_message?: string | null
+          provider_message_id?: string | null
+          retry_count?: number
+          claimed_at?: string | null
+          sent_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      appointment_sms_settings: {
+        Row: {
+          id: string
+          location: string
+          dry_run: boolean
+          test_phone_number: string | null
+          quiet_hours_enabled: boolean
+          quiet_hours_start: string
+          quiet_hours_end: string
+          timezone: string
+          enable_immediate_confirmation: boolean
+          enable_reminder_24h: boolean
+          enable_reminder_2h: boolean
+          enable_missed_appointment: boolean
+          template_immediate_confirmation: string
+          template_reminder_24h: string
+          template_reminder_2h: string
+          template_missed_appointment: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          location?: string
+          dry_run?: boolean
+          test_phone_number?: string | null
+          quiet_hours_enabled?: boolean
+          quiet_hours_start?: string
+          quiet_hours_end?: string
+          timezone?: string
+          enable_immediate_confirmation?: boolean
+          enable_reminder_24h?: boolean
+          enable_reminder_2h?: boolean
+          enable_missed_appointment?: boolean
+          template_immediate_confirmation?: string
+          template_reminder_24h?: string
+          template_reminder_2h?: string
+          template_missed_appointment?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          location?: string
+          dry_run?: boolean
+          test_phone_number?: string | null
+          quiet_hours_enabled?: boolean
+          quiet_hours_start?: string
+          quiet_hours_end?: string
+          timezone?: string
+          enable_immediate_confirmation?: boolean
+          enable_reminder_24h?: boolean
+          enable_reminder_2h?: boolean
+          enable_missed_appointment?: boolean
+          template_immediate_confirmation?: string
+          template_reminder_24h?: string
+          template_reminder_2h?: string
+          template_missed_appointment?: string
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -498,6 +633,198 @@ export type Database = {
         }
         Relationships: []
       }
+      automations: {
+        Row: {
+          id: string
+          name: string
+          status: string
+          trigger_type: string
+          trigger_config: Record<string, any>
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name?: string
+          status?: string
+          trigger_type?: string
+          trigger_config?: Record<string, any>
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          status?: string
+          trigger_type?: string
+          trigger_config?: Record<string, any>
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      automation_nodes: {
+        Row: {
+          id: string
+          automation_id: string
+          type: string
+          config: Record<string, any>
+          position_x: number
+          position_y: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          automation_id: string
+          type: string
+          config?: Record<string, any>
+          position_x?: number
+          position_y?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          automation_id?: string
+          type?: string
+          config?: Record<string, any>
+          position_x?: number
+          position_y?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      automation_edges: {
+        Row: {
+          id: string
+          automation_id: string
+          source_node_id: string
+          target_node_id: string
+          source_handle: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          automation_id: string
+          source_node_id: string
+          target_node_id: string
+          source_handle?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          automation_id?: string
+          source_node_id?: string
+          target_node_id?: string
+          source_handle?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      automation_enrollments: {
+        Row: {
+          id: string
+          automation_id: string
+          contact_id: string
+          current_node_id: string | null
+          status: string
+          enrolled_at: string
+          next_execution_at: string | null
+          completed_at: string | null
+          processing_locked_at: string | null
+          error_message: string | null
+          metadata: Record<string, any>
+        }
+        Insert: {
+          id?: string
+          automation_id: string
+          contact_id: string
+          current_node_id?: string | null
+          status?: string
+          enrolled_at?: string
+          next_execution_at?: string | null
+          completed_at?: string | null
+          processing_locked_at?: string | null
+          error_message?: string | null
+          metadata?: Record<string, any>
+        }
+        Update: {
+          id?: string
+          automation_id?: string
+          contact_id?: string
+          current_node_id?: string | null
+          status?: string
+          enrolled_at?: string
+          next_execution_at?: string | null
+          completed_at?: string | null
+          processing_locked_at?: string | null
+          error_message?: string | null
+          metadata?: Record<string, any>
+        }
+        Relationships: []
+      }
+      automation_execution_log: {
+        Row: {
+          id: string
+          enrollment_id: string
+          automation_id: string
+          contact_id: string
+          node_id: string | null
+          node_type: string | null
+          action: string
+          result: Record<string, any>
+          executed_at: string
+          error_message: string | null
+        }
+        Insert: {
+          id?: string
+          enrollment_id: string
+          automation_id: string
+          contact_id: string
+          node_id?: string | null
+          node_type?: string | null
+          action: string
+          result?: Record<string, any>
+          executed_at?: string
+          error_message?: string | null
+        }
+        Update: {
+          id?: string
+          enrollment_id?: string
+          automation_id?: string
+          contact_id?: string
+          node_id?: string | null
+          node_type?: string | null
+          action?: string
+          result?: Record<string, any>
+          executed_at?: string
+          error_message?: string | null
+        }
+        Relationships: []
+      }
+      customer_tags: {
+        Row: {
+          id: string
+          customer_id: string
+          tag: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          customer_id: string
+          tag: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          customer_id?: string
+          tag?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -518,6 +845,8 @@ export type Customer = Database['public']['Tables']['customers']['Row'];
 export type RepairTicket = Database['public']['Tables']['tickets']['Row'];
 export type Quote = Database['public']['Tables']['quotes']['Row'];
 export type Appointment = Database['public']['Tables']['appointments']['Row'];
+export type AppointmentSmsJob = Database['public']['Tables']['appointment_sms_jobs']['Row'];
+export type AppointmentSmsSettings = Database['public']['Tables']['appointment_sms_settings']['Row'];
 export type SmsConsentEvent = Database['public']['Tables']['sms_consent_events']['Row'];
 export type PartsOrder = Database['public']['Tables']['parts_orders']['Row'];
 
@@ -584,3 +913,122 @@ export type ImportedRow = {
   price?: number;
   payment_method?: string;
 };
+
+// ============================================================
+// AUTOMATION TYPES
+// ============================================================
+
+export type AutomationStatus = 'draft' | 'active' | 'paused';
+export type AutomationTriggerType = 'manual' | 'keyword_reply';
+export type AutomationNodeType = 'trigger' | 'send_sms' | 'wait' | 'condition' | 'update_tag' | 'end';
+export type AutomationEnrollmentStatus = 'active' | 'completed' | 'failed' | 'paused';
+
+export interface Automation {
+  id: string;
+  name: string;
+  status: AutomationStatus;
+  trigger_type: AutomationTriggerType;
+  trigger_config: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+  // Computed / joined
+  active_enrollments?: number;
+  completed_enrollments?: number;
+}
+
+export interface AutomationNode {
+  id: string;
+  automation_id: string;
+  type: AutomationNodeType;
+  config: AutomationNodeConfig;
+  position_x: number;
+  position_y: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Discriminated union config per node type
+export type AutomationNodeConfig =
+  | TriggerNodeConfig
+  | SendSmsNodeConfig
+  | WaitNodeConfig
+  | ConditionNodeConfig
+  | UpdateTagNodeConfig
+  | EndNodeConfig;
+
+export interface TriggerNodeConfig {
+  trigger_type: AutomationTriggerType;
+  keyword?: string;            // for keyword_reply trigger
+  label?: string;
+}
+
+export interface SendSmsNodeConfig {
+  message: string;
+  label?: string;
+}
+
+export interface WaitNodeConfig {
+  duration: number;
+  unit: 'minutes' | 'hours' | 'days';
+  label?: string;
+}
+
+export interface ConditionNodeConfig {
+  condition_type: 'has_replied';  // extensible later
+  label?: string;
+}
+
+export interface UpdateTagNodeConfig {
+  action: 'add' | 'remove';
+  tag: string;
+  label?: string;
+}
+
+export interface EndNodeConfig {
+  label?: string;
+}
+
+export interface AutomationEdge {
+  id: string;
+  automation_id: string;
+  source_node_id: string;
+  target_node_id: string;
+  source_handle: 'default' | 'yes' | 'no';
+  created_at: string;
+}
+
+export interface AutomationEnrollment {
+  id: string;
+  automation_id: string;
+  contact_id: string;
+  current_node_id: string | null;
+  status: AutomationEnrollmentStatus;
+  enrolled_at: string;
+  next_execution_at: string | null;
+  completed_at: string | null;
+  error_message: string | null;
+  metadata: Record<string, any>;
+  // Joined
+  contact?: Customer;
+  automation?: Automation;
+}
+
+export interface AutomationExecutionLogEntry {
+  id: string;
+  enrollment_id: string;
+  automation_id: string;
+  contact_id: string;
+  node_id: string | null;
+  node_type: string | null;
+  action: string;
+  result: Record<string, any>;
+  executed_at: string;
+  error_message: string | null;
+}
+
+export interface CustomerTag {
+  id: string;
+  customer_id: string;
+  tag: string;
+  created_at: string;
+}

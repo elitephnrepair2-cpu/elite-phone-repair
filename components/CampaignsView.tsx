@@ -1,8 +1,18 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import type { Customer, RepairTicket, MarketingCampaign, ScheduledCampaign, SmsLog } from '../types';
 import { sendSmsViaEdgeFunction } from '../services/smsService';
 import { SMSInboxView } from './SMSInboxView';
+import {
+  MERGE_TAG_DEFINITIONS,
+  buildContextMap,
+  renderTemplate,
+  templateUsesRepairTags,
+  contextSatisfiesTemplate,
+  computeRepairAudienceStats,
+  type MergeContext,
+  type RepairAudienceStats,
+} from '../services/mergeTags';
 
 interface CampaignsViewProps {
   customers: Customer[];
@@ -41,17 +51,29 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
   const [segmentMode, setSegmentMode] = useState<'unmessaged_only' | 'messaged_only' | 'all'>('unmessaged_only');
   const [enableExclusion, setEnableExclusion] = useState<boolean>(false);
   const [selectedExcludeCampaignId, setSelectedExcludeCampaignId] = useState<string>('');
+  const [selectedExcludeCampaignIds, setSelectedExcludeCampaignIds] = useState<string[]>([]);
+  const [cooldownDays, setCooldownDays] = useState<'off' | '7' | '14' | '30'>('off');
+  const [batchSize, setBatchSize] = useState<number>(0);
+  const [batchNumber, setBatchNumber] = useState<number>(1);
   const [recipientLimit, setRecipientLimit] = useState<string>('');
   const [outboundLogs, setOutboundLogs] = useState<any[]>([]);
   const [showSegmentDetailsModal, setShowSegmentDetailsModal] = useState<boolean>(false);
   const [showTwilioDeliveryModal, setShowTwilioDeliveryModal] = useState<boolean>(false);
 
+  // Merge Tag / Personalization State
+  const [repairHistoryOverride, setRepairHistoryOverride] = useState<boolean>(false);
+  const [previewRecipientIndex, setPreviewRecipientIndex] = useState<number>(0);
+  const [showMergeTagDropdown, setShowMergeTagDropdown] = useState<boolean>(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mergeTagDropdownRef = useRef<HTMLDivElement>(null);
+
   // Selected Campaign Recipient Detail Modal State
   const [selectedHistoryCampaign, setSelectedHistoryCampaign] = useState<MarketingCampaign | null>(null);
   const [historyCampaignLogs, setHistoryCampaignLogs] = useState<SmsLog[]>([]);
+  const [historyCampaignReplies, setHistoryCampaignReplies] = useState<SmsLog[]>([]);
   const [isLoadingHistoryLogs, setIsLoadingHistoryLogs] = useState<boolean>(false);
   const [historyRecipientSearch, setHistoryRecipientSearch] = useState<string>('');
-  const [historyRecipientFilter, setHistoryRecipientFilter] = useState<'all' | 'sent' | 'failed'>('all');
+  const [historyRecipientFilter, setHistoryRecipientFilter] = useState<'all' | 'sent' | 'failed' | 'replies'>('all');
   const [historyRecipientSort, setHistoryRecipientSort] = useState<'time' | 'alpha'>('time');
 
   // Sending Process State
@@ -200,16 +222,65 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
     return map;
   }, [customers]);
 
-  // Dynamically compute messaged sets to prevent stale cache on empty mount
-  const { messagedCustomerIds, messagedPhones, campaignCustomerMap } = useMemo(() => {
+  // Merge context map — built once from all tickets (O(n_tickets + n_customers), not per-recipient)
+  const contextMap = useMemo(
+    () => buildContextMap(customers || [], tickets || []),
+    [customers, tickets]
+  );
+
+  // Close merge tag dropdown on outside click
+  useEffect(() => {
+    if (!showMergeTagDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (mergeTagDropdownRef.current && !mergeTagDropdownRef.current.contains(e.target as Node)) {
+        setShowMergeTagDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMergeTagDropdown]);
+
+  // Insert a merge tag at the current textarea cursor position
+  const insertMergeTag = useCallback((tagKey: string) => {
+    const tag = '{{' + tagKey + '}}';
+    const textarea = textareaRef.current;
+    setShowMergeTagDropdown(false);
+    if (!textarea) {
+      setMessageContent(prev => prev + tag);
+      return;
+    }
+    const start = textarea.selectionStart ?? messageContent.length;
+    const end = textarea.selectionEnd ?? messageContent.length;
+    const newContent = messageContent.slice(0, start) + tag + messageContent.slice(end);
+    setMessageContent(newContent);
+    setRepairHistoryOverride(false);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const newPos = start + tag.length;
+      textarea.setSelectionRange(newPos, newPos);
+    });
+  }, [messageContent]);
+
+  // Dynamically compute messaged sets and recent SMS dates to prevent stale cache on empty mount
+  const { messagedCustomerIds, messagedPhones, campaignCustomerMap, customerLastSmsMap } = useMemo(() => {
     const idSet = new Set<string>();
     const phoneSet = new Set<string>();
     const campMap = new Map<string, Set<string>>();
+    const lastSmsMap = new Map<string, Date>();
 
     outboundLogs.forEach(l => {
       if (l.status !== 'failed') {
+        const createdDate = l.created_at ? new Date(l.created_at) : null;
+
         if (l.customer_id) {
           idSet.add(l.customer_id);
+
+          if (createdDate) {
+            const current = lastSmsMap.get(l.customer_id);
+            if (!current || createdDate > current) {
+              lastSmsMap.set(l.customer_id, createdDate);
+            }
+          }
 
           const cust = customerMap.get(l.customer_id);
           if (cust && cust.phone) {
@@ -217,6 +288,12 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
             const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
             if (norm && norm.length === 10) {
               phoneSet.add(norm);
+              if (createdDate) {
+                const current = lastSmsMap.get(norm);
+                if (!current || createdDate > current) {
+                  lastSmsMap.set(norm, createdDate);
+                }
+              }
             }
           }
         }
@@ -226,6 +303,12 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
           const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
           if (norm && norm.length === 10) {
             phoneSet.add(norm);
+            if (createdDate) {
+              const current = lastSmsMap.get(norm);
+              if (!current || createdDate > current) {
+                lastSmsMap.set(norm, createdDate);
+              }
+            }
           }
         }
 
@@ -259,7 +342,8 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
     return {
       messagedCustomerIds: idSet,
       messagedPhones: phoneSet,
-      campaignCustomerMap: campMap
+      campaignCustomerMap: campMap,
+      customerLastSmsMap: lastSmsMap
     };
   }, [outboundLogs, customerMap]);
 
@@ -280,6 +364,7 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
     setIsLoadingHistoryLogs(true);
     setHistoryRecipientSearch('');
     setHistoryRecipientFilter('all');
+    setHistoryCampaignReplies([]);
 
     try {
       let allLogs: SmsLog[] = [];
@@ -304,6 +389,39 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
       }
 
       setHistoryCampaignLogs(allLogs);
+
+      // Fetch inbound replies from recipients who were sent this campaign
+      const recipientCustomerIds = new Set(allLogs.map(l => l.customer_id).filter(Boolean));
+      const recipientPhones = new Set<string>();
+      allLogs.forEach(l => {
+        if (l.to_phone) {
+          const clean = l.to_phone.replace(/\D/g, '');
+          const norm = clean.length === 11 && clean.startsWith('1') ? clean.slice(1) : clean;
+          if (norm) recipientPhones.add(norm);
+        }
+      });
+
+      if (recipientCustomerIds.size > 0 || recipientPhones.size > 0) {
+        const { data: replies } = await (supabase as any)
+          .from('sms_messages')
+          .select('*')
+          .eq('direction', 'inbound')
+          .gte('created_at', campaign.created_at)
+          .order('created_at', { ascending: false });
+
+        if (replies) {
+          const matchedReplies = replies.filter((r: any) => {
+            if (r.customer_id && recipientCustomerIds.has(r.customer_id)) return true;
+            if (r.from_phone) {
+              const digits = r.from_phone.replace(/\D/g, '');
+              const norm = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+              return recipientPhones.has(norm);
+            }
+            return false;
+          });
+          setHistoryCampaignReplies(matchedReplies);
+        }
+      }
     } catch (e) {
       console.error("Error fetching campaign recipient logs:", e);
     } finally {
@@ -341,12 +459,29 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
       if (!isMessaged) return false;
     }
 
-    if (enableExclusion && selectedExcludeCampaignId) {
-      const excludedSet = campaignCustomerMap.get(selectedExcludeCampaignId);
-      if (excludedSet) {
-        if (excludedSet.has(c.id) || (normPhone && excludedSet.has(normPhone))) {
-          return false;
+    // Exclude selected past campaigns (supports single or multi-campaign exclusion)
+    if (enableExclusion) {
+      const idsToExclude = selectedExcludeCampaignIds.length > 0 
+        ? selectedExcludeCampaignIds 
+        : (selectedExcludeCampaignId ? [selectedExcludeCampaignId] : []);
+
+      for (const campId of idsToExclude) {
+        const excludedSet = campaignCustomerMap.get(campId);
+        if (excludedSet) {
+          if (excludedSet.has(c.id) || (normPhone && excludedSet.has(normPhone))) {
+            return false;
+          }
         }
+      }
+    }
+
+    // Apply Recent SMS Cooldown Exclusion
+    if (cooldownDays !== 'off') {
+      const days = parseInt(cooldownDays, 10);
+      const cutoff = new Date(Date.now() - (days * 24 * 60 * 60 * 1000));
+      const lastSmsDate = customerLastSmsMap.get(c.id) || (normPhone ? customerLastSmsMap.get(normPhone) : undefined);
+      if (lastSmsDate && lastSmsDate >= cutoff) {
+        return false;
       }
     }
 
@@ -356,29 +491,50 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
   // All eligible consented recipients in segment
   const eligibleConsentedRecipients = segmentedCustomers.filter(c => c.marketing_sms_consent === true);
 
-  // Apply Recipient Batch Limit if specified
+  // Apply Sequential Batch Chunking & Pagination
+  const totalBatches = batchSize > 0 ? Math.max(1, Math.ceil(eligibleConsentedRecipients.length / batchSize)) : 1;
+  const currentBatchNum = Math.min(Math.max(1, batchNumber), totalBatches);
+  
   const recipientLimitNum = recipientLimit ? parseInt(recipientLimit, 10) : 0;
-  const consentedRecipients = (recipientLimitNum > 0 && recipientLimitNum < eligibleConsentedRecipients.length)
-    ? eligibleConsentedRecipients.slice(0, recipientLimitNum)
-    : eligibleConsentedRecipients;
+  
+  const consentedRecipients = useMemo(() => {
+    let list = eligibleConsentedRecipients;
+    if (batchSize > 0) {
+      const start = (currentBatchNum - 1) * batchSize;
+      const end = currentBatchNum * batchSize;
+      list = list.slice(start, end);
+    } else if (recipientLimitNum > 0 && recipientLimitNum < list.length) {
+      list = list.slice(0, recipientLimitNum);
+    }
+    return list;
+  }, [eligibleConsentedRecipients, batchSize, currentBatchNum, recipientLimitNum]);
 
-  // Helper to parse tags
-  const parseMessage = (template: string, customer: Customer) => {
-    let parsed = template;
-    // 1. Parse name
-    parsed = parsed.replace(/{name}/g, customer.name);
+  // ── Repair-history audience stats (computed from the current template + audience) ──
+  const repairAudienceStats = useMemo<RepairAudienceStats>(
+    () => computeRepairAudienceStats(consentedRecipients, contextMap, messageContent),
+    [consentedRecipients, contextMap, messageContent]
+  );
 
-    // 2. Parse device (find last repaired device)
-    const customerTickets = tickets.filter(t => t.customer_id === customer.id);
-    const lastDevice = customerTickets[customerTickets.length - 1]?.device || 'your device';
-    parsed = parsed.replace(/{device}/g, lastDevice);
+  // Final send list: auto-skip customers without repair history when template uses repair tags
+  // (unless the user explicitly enables the override)
+  const finalRecipients = useMemo(() => {
+    if (!repairAudienceStats.usesRepairTags || repairHistoryOverride) {
+      return consentedRecipients;
+    }
+    return consentedRecipients.filter(c => contextSatisfiesTemplate(messageContent, contextMap.get(c.id) as MergeContext));
+  }, [consentedRecipients, repairAudienceStats.usesRepairTags, repairHistoryOverride, contextMap, messageContent]);
 
-    return parsed;
-  };
-
-  // Preview message content dynamically using a dummy or first matching customer
-  const sampleCustomer = consentedRecipients[0] || { name: 'John Doe', id: 'sample' } as Customer;
-  const messagePreview = messageContent ? parseMessage(messageContent, sampleCustomer) : 'Draft a message template to see preview...';
+  // Preview cycling — clamp index when recipient count changes
+  const clampedPreviewIndex = Math.min(previewRecipientIndex, Math.max(0, Math.min(finalRecipients.length - 1, 4)));
+  const previewRecipient = finalRecipients[clampedPreviewIndex] ?? null;
+  const previewContext: MergeContext | undefined = previewRecipient ? contextMap.get(previewRecipient.id) : undefined;
+  const messagePreview = messageContent
+    ? previewContext
+      ? renderTemplate(messageContent, previewContext)
+      : finalRecipients.length === 0
+        ? 'No eligible recipients to preview.'
+        : 'Loading preview...'
+    : 'Draft a message template to see preview...';
 
   // Handle Launch Campaign
   const handleLaunchCampaign = async () => {
@@ -390,8 +546,12 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
       showAlert("Please enter message content.");
       return;
     }
-    if (consentedRecipients.length === 0) {
-      showAlert(`There are no eligible consented recipients at the ${targetLocation} location.`);
+    if (finalRecipients.length === 0) {
+      showAlert(
+        repairAudienceStats.usesRepairTags && !repairHistoryOverride
+          ? `All ${consentedRecipients.length} consented recipients at ${targetLocation} are missing repair history. Enable the override or use a template without repair tags.`
+          : `There are no eligible consented recipients at the ${targetLocation} location.`
+      );
       return;
     }
 
@@ -419,7 +579,7 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
                 message_body: messageContent,
                 scheduled_for: new Date(scheduledFor).toISOString(),
                 status: 'pending',
-                total_recipients: consentedRecipients.length,
+                total_recipients: finalRecipients.length,
                 successful_sends: 0
               }]);
 
@@ -445,13 +605,18 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
     }
 
     // Direct Instant Sending logic
+    const skippedCount = consentedRecipients.length - finalRecipients.length;
+    const confirmMsg = skippedCount > 0
+      ? `Launch "${campaignName}"?\n\n✓ ${finalRecipients.length} recipients will receive the message.\n⚠️ ${skippedCount} recipients will be skipped (missing repair history).\n\nLocation: ${targetLocation}`
+      : `Are you sure you want to launch "${campaignName}"?\nThis will send SMS messages immediately to ${finalRecipients.length} customers at ${targetLocation}.`;
+
     showConfirm(
-      `Are you sure you want to launch "${campaignName}"?\nThis will send SMS messages immediately to ${consentedRecipients.length} customers at ${targetLocation}.`,
+      confirmMsg,
       async () => {
         setIsSending(true);
         setSendingProgress({
           current: 0,
-          total: consentedRecipients.length,
+          total: finalRecipients.length,
           success: 0,
           failed: 0,
         });
@@ -465,7 +630,7 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
               name: campaignName,
               location: targetLocation,
               message_body: messageContent,
-              total_recipients: consentedRecipients.length,
+              total_recipients: finalRecipients.length,
               successful_sends: 0
             }])
             .select()
@@ -485,22 +650,26 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
           return;
         }
 
-        // 2. Loop through recipients in high-performance parallel batches of 15
+        // 2. Loop through final recipients in high-performance parallel batches of 15.
+        //    Each recipient gets their own fully rendered message (stored in sms_messages.content).
         let successCount = 0;
         let failCount = 0;
         const BATCH_SIZE = 15;
 
-        for (let i = 0; i < consentedRecipients.length; i += BATCH_SIZE) {
-          const batch = consentedRecipients.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < finalRecipients.length; i += BATCH_SIZE) {
+          const batch = finalRecipients.slice(i, i + BATCH_SIZE);
 
           await Promise.all(
             batch.map(async (recipient) => {
-              const parsedBody = parseMessage(messageContent, recipient);
+              // Render the personalised message for this specific recipient.
+              // The rendered text is what gets logged in sms_messages.content.
+              const ctx = contextMap.get(recipient.id);
+              const renderedBody = ctx ? renderTemplate(messageContent, ctx) : messageContent;
               try {
                 const res = await sendSmsViaEdgeFunction({
                   customer_id: recipient.id,
                   message_type: 'marketing',
-                  content: parsedBody,
+                  content: renderedBody,
                   ticket_id: null,
                   campaign_id: campaignId
                 });
@@ -517,10 +686,10 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
             })
           );
 
-          const currentProcessed = Math.min(i + BATCH_SIZE, consentedRecipients.length);
+          const currentProcessed = Math.min(i + BATCH_SIZE, finalRecipients.length);
           setSendingProgress({
             current: currentProcessed,
-            total: consentedRecipients.length,
+            total: finalRecipients.length,
             success: successCount,
             failed: failCount
           });
@@ -539,11 +708,12 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
         // Refresh UI
         setCampaignName('');
         setMessageContent('');
+        setRepairHistoryOverride(false);
         // Wait 1.5 seconds for DB logs to fully commit and index in Supabase
         await new Promise(r => setTimeout(r, 1500));
         await loadData();
         setIsSending(false);
-        showAlert(`Campaign complete!\nSuccessful sends: ${successCount}\nFailed sends: ${failCount}`);
+        showAlert(`Campaign complete!\nSuccessful sends: ${successCount}\nFailed sends: ${failCount}${skippedCount > 0 ? `\nSkipped (no repair history): ${skippedCount}` : ''}`);
       }
     );
   };
@@ -713,88 +883,214 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
               </select>
             </div>
 
-            {/* Step 2: Optional Campaign Exclusion Checkbox */}
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-              <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={enableExclusion}
-                  onChange={e => {
-                    setEnableExclusion(e.target.checked);
-                    if (!e.target.checked) setSelectedExcludeCampaignId('');
-                  }}
-                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
-                />
-                <span>Exclude recipients of a specific previous campaign?</span>
-              </label>
+            {/* Step 2: Multi-Campaign Exclusions & Recent SMS Cooldown */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+              <div className="flex justify-between items-center">
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={enableExclusion}
+                    onChange={e => {
+                      setEnableExclusion(e.target.checked);
+                      if (!e.target.checked) {
+                        setSelectedExcludeCampaignId('');
+                        setSelectedExcludeCampaignIds([]);
+                      }
+                    }}
+                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                  />
+                  <span>Exclude recipients from previous campaign(s)?</span>
+                </label>
+
+                {/* Cooldown selector */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">SMS Cooldown:</span>
+                  <select
+                    value={cooldownDays}
+                    onChange={e => setCooldownDays(e.target.value as any)}
+                    className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                  >
+                    <option value="off">Off (Message anytime)</option>
+                    <option value="7">7 Days Cooldown</option>
+                    <option value="14">14 Days Cooldown</option>
+                    <option value="30">30 Days Cooldown</option>
+                  </select>
+                </div>
+              </div>
 
               {enableExclusion && (
-                <div className="animate-in slide-in-from-top-1 duration-150 pt-1">
-                  <select
-                    value={selectedExcludeCampaignId}
-                    onChange={e => setSelectedExcludeCampaignId(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-xs font-medium"
-                  >
-                    <option value="">-- Select Past Campaign to Exclude --</option>
-                    {campaigns.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} ({new Date(c.created_at).toLocaleDateString()}) - {c.total_recipients} recipients
-                      </option>
-                    ))}
-                  </select>
+                <div className="animate-in slide-in-from-top-1 duration-150 space-y-2 pt-1">
+                  <span className="text-[11px] font-bold text-slate-600 block">
+                    Select past campaigns to exclude (multiple selection supported):
+                  </span>
+                  
+                  <div className="max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-xl p-2 space-y-1 divide-y divide-slate-100">
+                    {campaigns.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic p-2">No past campaigns available to exclude.</p>
+                    ) : (
+                      campaigns.map(c => {
+                        const isSelected = selectedExcludeCampaignIds.includes(c.id) || selectedExcludeCampaignId === c.id;
+                        return (
+                          <label key={c.id} className="flex items-center justify-between py-1.5 px-2 hover:bg-slate-50 rounded-lg text-xs cursor-pointer select-none">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    setSelectedExcludeCampaignIds(prev => Array.from(new Set([...prev, c.id])));
+                                  } else {
+                                    setSelectedExcludeCampaignIds(prev => prev.filter(id => id !== c.id));
+                                    if (selectedExcludeCampaignId === c.id) setSelectedExcludeCampaignId('');
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 text-indigo-600 rounded"
+                              />
+                              <span className="font-bold text-slate-800">{c.name}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {new Date(c.created_at).toLocaleDateString()} ({c.total_recipients} sent)
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {selectedExcludeCampaignIds.length > 0 && (
+                    <div className="flex items-center justify-between text-[11px] text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100 font-bold">
+                      <span>Excluding recipients from {selectedExcludeCampaignIds.length} campaign(s)</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedExcludeCampaignIds([])}
+                        className="text-xs text-indigo-600 hover:text-indigo-800 underline"
+                      >
+                        Clear Selection
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Step 3: Recipient Quantity & Batch Size Control */}
-            <div className="bg-indigo-50/70 p-4 rounded-2xl border border-indigo-200/80 space-y-3 shadow-sm">
+            {/* Step 3: Sequential Batch Chunking & Live Overlap Inspector */}
+            <div className="bg-gradient-to-br from-indigo-50/90 to-slate-50 p-4 rounded-2xl border border-indigo-200/90 space-y-4 shadow-sm">
               <div className="flex justify-between items-center">
-                <label className="text-sm font-bold text-indigo-950 flex items-center gap-2">
-                  <span>📊 Recipient Quantity & Batch Limit</span>
-                </label>
-                <span className="text-[11px] font-extrabold text-indigo-700 bg-indigo-100/90 px-2.5 py-0.5 rounded-full border border-indigo-200">
-                  {recipientLimitNum > 0 && recipientLimitNum < eligibleConsentedRecipients.length
-                    ? `Limiting to ${recipientLimitNum} of ${eligibleConsentedRecipients.length}`
-                    : `Sending to All ${eligibleConsentedRecipients.length} eligible`}
-                </span>
+                <div>
+                  <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                    <span>📦 Sequential Batch Chunking</span>
+                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-full border border-emerald-200">
+                      ✓ 0 Overlapping Recipients
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Break large lists into safe, trackable send batches to prevent carrier blocks.
+                  </p>
+                </div>
               </div>
 
-              <p className="text-xs text-indigo-900/80 font-medium">
-                Select or type the max number of contacts to message in this batch (ideal for managing Twilio credit balance).
-              </p>
+              {/* Batch Size Presets */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block">1. Select Batch Chunk Size:</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {[
+                    { label: 'Off (All Eligible)', size: 0 },
+                    { label: '250 per batch', size: 250 },
+                    { label: '500 per batch', size: 500 },
+                    { label: '1,000 per batch', size: 1000 },
+                  ].map(preset => {
+                    const isActive = batchSize === preset.size;
+                    return (
+                      <button
+                        key={preset.size}
+                        type="button"
+                        onClick={() => {
+                          setBatchSize(preset.size);
+                          setBatchNumber(1);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all border ${
+                          isActive
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-indigo-50'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                {['', '25', '50', '100', '250', '500'].map(preset => {
-                  const isActive = recipientLimit === preset || (preset === '' && recipientLimit === '');
-                  const label = preset === '' ? `All (${eligibleConsentedRecipients.length})` : preset;
-                  return (
+              {/* Active Batch Chunk Navigator */}
+              {batchSize > 0 && totalBatches > 1 && (
+                <div className="bg-white p-3 rounded-xl border border-indigo-200 space-y-2 animate-in zoom-in-95 duration-150">
+                  <div className="flex justify-between items-center text-xs font-extrabold text-indigo-950">
+                    <span>Active Send Chunk: Batch {currentBatchNum} of {totalBatches}</span>
+                    <span className="text-indigo-600 font-black">
+                      Recipients {(currentBatchNum - 1) * batchSize + 1} – {Math.min(eligibleConsentedRecipients.length, currentBatchNum * batchSize)} of {eligibleConsentedRecipients.length}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
                     <button
-                      key={preset || 'all'}
                       type="button"
-                      onClick={() => setRecipientLimit(preset)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all border ${
-                        isActive
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                          : 'bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-100/60'
-                      }`}
+                      disabled={currentBatchNum <= 1}
+                      onClick={() => setBatchNumber(prev => Math.max(1, prev - 1))}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-800 font-bold rounded-lg text-xs transition-colors"
                     >
-                      {label}
+                      ← Prev Batch
                     </button>
-                  );
-                })}
-              </div>
 
-              <div className="flex items-center gap-3 pt-2 border-t border-indigo-200/50">
-                <span className="text-xs font-bold text-indigo-950 whitespace-nowrap">Or Custom Quantity:</span>
-                <input
-                  type="number"
-                  placeholder={`Max contacts (e.g. 300)`}
-                  value={recipientLimit}
-                  onChange={e => setRecipientLimit(e.target.value)}
-                  min="1"
-                  max={eligibleConsentedRecipients.length}
-                  className="w-full px-3 py-1.5 bg-white border border-indigo-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-xs font-extrabold text-indigo-950"
-                />
+                    <select
+                      value={currentBatchNum}
+                      onChange={e => setBatchNumber(parseInt(e.target.value, 10))}
+                      className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      {Array.from({ length: totalBatches }, (_, i) => i + 1).map(num => (
+                        <option key={num} value={num}>
+                          Batch {num} of {totalBatches} (Recipients {(num - 1) * batchSize + 1} – {Math.min(eligibleConsentedRecipients.length, num * batchSize)})
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      disabled={currentBatchNum >= totalBatches}
+                      onClick={() => setBatchNumber(prev => Math.min(totalBatches, prev + 1))}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold rounded-lg text-xs transition-colors shadow-sm"
+                    >
+                      Next Batch →
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Pre-Flight Audience Overlap Inspector Breakdown */}
+              <div className="bg-slate-900 text-slate-100 p-3.5 rounded-xl text-xs space-y-2 font-mono">
+                <div className="flex justify-between items-center text-slate-400 font-sans border-b border-slate-800 pb-1.5 text-[11px] font-bold">
+                  <span>📊 Live Pre-Flight Audience Inspector</span>
+                  <span className="text-emerald-400 font-mono">Ready to Dispatch</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pt-1">
+                  <div className="bg-slate-800/80 p-2 rounded-lg border border-slate-700/60">
+                    <span className="text-[9px] text-slate-400 block font-sans font-bold">LOCATION POOL</span>
+                    <span className="text-base font-black text-white">{locationCustomers.filter(c => c.marketing_sms_consent === true).length}</span>
+                  </div>
+                  <div className="bg-slate-800/80 p-2 rounded-lg border border-slate-700/60">
+                    <span className="text-[9px] text-amber-400 block font-sans font-bold">COOLDOWN / EXCLUDED</span>
+                    <span className="text-base font-black text-amber-300">
+                      -{locationCustomers.filter(c => c.marketing_sms_consent === true).length - eligibleConsentedRecipients.length}
+                    </span>
+                  </div>
+                  <div className="bg-slate-800/80 p-2 rounded-lg border border-slate-700/60">
+                    <span className="text-[9px] text-sky-400 block font-sans font-bold">SAFE ELIGIBLE POOL</span>
+                    <span className="text-base font-black text-sky-300">{eligibleConsentedRecipients.length}</span>
+                  </div>
+                  <div className="bg-emerald-950/80 p-2 rounded-lg border border-emerald-600/40">
+                    <span className="text-[9px] text-emerald-300 block font-sans font-bold">CURRENT BATCH QUEUED</span>
+                    <span className="text-base font-black text-emerald-400">{consentedRecipients.length}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -813,31 +1109,73 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
             )}
 
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                Message Content
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-bold text-slate-700">Message Content</label>
+                {/* Merge Tag Insert Dropdown */}
+                <div className="relative" ref={mergeTagDropdownRef}>
+                  <button
+                    type="button"
+                    id="merge-tag-btn"
+                    onClick={() => setShowMergeTagDropdown(v => !v)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs border border-indigo-200 transition-colors shadow-sm"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Insert Personalization
+                  </button>
+                  {showMergeTagDropdown && (
+                    <div
+                      id="merge-tag-dropdown"
+                      className="absolute right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-30 w-76 overflow-hidden"
+                      style={{ width: '300px' }}
+                    >
+                      <div className="px-3 py-2 border-b border-slate-100 bg-slate-50">
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Available Merge Tags</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Click to insert at cursor position</p>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto py-1">
+                        {MERGE_TAG_DEFINITIONS.map(tag => (
+                          <button
+                            key={tag.key}
+                            type="button"
+                            id={`merge-tag-${tag.key}`}
+                            onClick={() => insertMergeTag(tag.key)}
+                            className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 transition-colors flex items-start gap-2.5 group"
+                          >
+                            <span className="font-mono text-[11px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-md font-bold whitespace-nowrap shrink-0 group-hover:bg-indigo-200 transition-colors mt-0.5">
+                              {'{{' + tag.key + '}}'}
+                            </span>
+                            <div>
+                              <span className="text-xs font-bold text-slate-800 block">{tag.label}</span>
+                              <span className="text-[10px] text-slate-400 font-medium">{tag.description}</span>
+                              {tag.requiresRepairHistory && (
+                                <span className="text-[9px] font-bold text-amber-600 block mt-0.5">⚙ Requires repair history</span>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
               <textarea
-                rows={4}
-                placeholder="Write your campaign details..."
+                ref={textareaRef}
+                id="campaign-message-textarea"
+                rows={5}
+                placeholder={`Write your campaign message...\n\nTip: Click "Insert Personalization" above to add dynamic customer data like {{first_name}} or {{last_device}}.`}
                 value={messageContent}
-                onChange={e => setMessageContent(e.target.value)}
+                onChange={e => {
+                  setMessageContent(e.target.value);
+                  setRepairHistoryOverride(false);
+                  setPreviewRecipientIndex(0);
+                }}
                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 outline-none text-sm font-medium leading-relaxed"
               />
-              <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
-                <span>Insert Tags:</span>
-                <button 
-                  onClick={() => setMessageContent(prev => prev + '{name}')} 
-                  className="px-2 py-1 bg-slate-100 rounded-md text-red-600 hover:bg-slate-200"
-                >
-                  {`{name}`} (Customer Name)
-                </button>
-                <button 
-                  onClick={() => setMessageContent(prev => prev + '{device}')} 
-                  className="px-2 py-1 bg-slate-100 rounded-md text-red-600 hover:bg-slate-200"
-                >
-                  {`{device}`} (Last Device)
-                </button>
-              </div>
+              <p className="mt-1.5 text-[10px] text-slate-400 font-medium">
+                Legacy tags <code className="bg-slate-100 px-1 rounded">{'{name}'}</code> and <code className="bg-slate-100 px-1 rounded">{'{device}'}</code> still work for existing campaigns.
+              </p>
             </div>
           </div>
 
@@ -850,7 +1188,10 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
               </div>
               <div className="bg-white p-2.5 rounded-xl border border-emerald-200 shadow-sm">
                 <span className="text-[10px] text-emerald-600 font-bold block mb-0.5 uppercase tracking-wider">Will Receive</span>
-                <span className="text-2xl font-black text-emerald-600">{consentedRecipients.length}</span>
+                <span className="text-2xl font-black text-emerald-600">{finalRecipients.length}</span>
+                {repairAudienceStats.usesRepairTags && repairAudienceStats.missingHistory > 0 && !repairHistoryOverride && (
+                  <span className="text-[9px] text-slate-400 font-bold block">(filtered)</span>
+                )}
               </div>
               <button
                 type="button"
@@ -862,6 +1203,70 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
                 <span className="text-2xl font-black text-rose-600">{optedOutCount}</span>
               </button>
             </div>
+
+            {/* Repair History Breakdown — only shown when template uses repair tags */}
+            {repairAudienceStats.usesRepairTags && repairAudienceStats.total > 0 && (
+              <div className={`rounded-xl border p-3 space-y-2.5 ${
+                repairAudienceStats.isDataQualityWarning
+                  ? 'bg-amber-50 border-amber-200'
+                  : repairAudienceStats.missingHistory > 0
+                    ? 'bg-slate-50 border-slate-200'
+                    : 'bg-emerald-50 border-emerald-200'
+              }`}>
+                <div className="flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-xs font-black text-slate-700">Repair History Filter Active</span>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5 font-semibold text-emerald-700">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      Have repair history — will receive
+                    </span>
+                    <span className="font-black text-emerald-700">{repairAudienceStats.withHistory.toLocaleString()}</span>
+                  </div>
+                  {repairAudienceStats.missingHistory > 0 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 font-semibold text-rose-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                        Missing repair history — {repairHistoryOverride ? 'included (override on)' : 'will be skipped'}
+                      </span>
+                      <span className="font-black text-rose-600">{repairAudienceStats.missingHistory.toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+
+                {repairAudienceStats.isDataQualityWarning && (
+                  <div className="bg-amber-100 border border-amber-300 rounded-lg p-2.5 text-xs text-amber-900">
+                    <span className="font-extrabold block">⚠️ Possible Data Matching Issue</span>
+                    <p className="font-medium mt-0.5 leading-relaxed">
+                      {Math.round(repairAudienceStats.missingPercent * 100)}% of recipients show no repair history.
+                      Most customers in this CRM should have tickets — this may be a data-matching issue rather
+                      than customers who never had a repair.
+                    </p>
+                  </div>
+                )}
+
+                {repairAudienceStats.missingHistory > 0 && (
+                  <label className="flex items-start gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none pt-1.5 border-t border-slate-200/80">
+                    <input
+                      type="checkbox"
+                      id="repair-history-override"
+                      checked={repairHistoryOverride}
+                      onChange={e => setRepairHistoryOverride(e.target.checked)}
+                      className="w-3.5 h-3.5 mt-0.5 text-amber-500 rounded focus:ring-amber-400 shrink-0"
+                    />
+                    <span>
+                      <strong>Override:</strong> Include {repairAudienceStats.missingHistory.toLocaleString()} recipients missing repair history
+                      <span className="text-slate-400"> — repair tags will be blank for them</span>
+                    </span>
+                  </label>
+                )}
+              </div>
+            )}
 
             <div className="flex gap-2">
               <button
@@ -878,10 +1283,47 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
             </div>
           </div>
 
-          {/* SMS preview panel */}
-          <div className="border border-dashed border-slate-300 p-4 rounded-xl bg-amber-50/20">
-            <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block mb-2">Recipient Preview Example</span>
-            <div className="bg-white p-3.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 leading-relaxed max-w-md">
+          {/* SMS preview panel — cycles through up to 5 real recipients */}
+          <div className="border border-dashed border-slate-300 p-4 rounded-xl bg-amber-50/20 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Recipient Preview</span>
+              {finalRecipients.length > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    id="preview-prev-btn"
+                    onClick={() => setPreviewRecipientIndex(i => Math.max(0, i - 1))}
+                    disabled={clampedPreviewIndex === 0}
+                    className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-600 transition-colors flex items-center justify-center font-bold text-sm"
+                  >‹</button>
+                  <span className="text-[10px] font-bold text-slate-500 tabular-nums">
+                    {clampedPreviewIndex + 1} / {Math.min(finalRecipients.length, 5)}
+                  </span>
+                  <button
+                    type="button"
+                    id="preview-next-btn"
+                    onClick={() => setPreviewRecipientIndex(i => Math.min(Math.min(finalRecipients.length - 1, 4), i + 1))}
+                    disabled={clampedPreviewIndex >= Math.min(finalRecipients.length - 1, 4)}
+                    className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-600 transition-colors flex items-center justify-center font-bold text-sm"
+                  >›</button>
+                </div>
+              )}
+            </div>
+
+            {previewRecipient && previewContext && (
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 font-black flex items-center justify-center text-[11px] shrink-0">
+                  {(previewRecipient.name || '?')[0].toUpperCase()}
+                </div>
+                <span className="text-xs font-bold text-slate-700">{previewRecipient.name}</span>
+                {previewContext.has_repair_history
+                  ? <span className="text-[10px] font-bold text-emerald-600 ml-1">● Has repair history</span>
+                  : <span className="text-[10px] font-bold text-rose-500 ml-1">● No repair history</span>
+                }
+              </div>
+            )}
+
+            <div className="bg-white p-3.5 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 leading-relaxed">
               {messagePreview}
             </div>
           </div>
@@ -1286,6 +1728,16 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
                 >
                   ⚠️ Failed / Missed ({historyCampaignLogs.filter(l => l.status === 'failed' || l.status === 'skipped').length})
                 </button>
+                <button
+                  onClick={() => setHistoryRecipientFilter('replies')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                    historyRecipientFilter === 'replies'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100/60'
+                  }`}
+                >
+                  💬 Campaign Replies ({historyCampaignReplies.length})
+                </button>
               </div>
 
               {/* Search and Sort Row */}
@@ -1321,6 +1773,79 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
                   <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
                   <p className="text-xs text-slate-500 font-bold">Loading recipient delivery records...</p>
                 </div>
+              ) : historyRecipientFilter === 'replies' ? (
+                (() => {
+                  let filteredReplies = historyCampaignReplies.filter(r => {
+                    if (historyRecipientSearch.trim()) {
+                      const q = historyRecipientSearch.toLowerCase().replace(/\D/g, '');
+                      const cust = r.customer_id ? customerMap.get(r.customer_id) : null;
+                      const nameMatch = (cust?.name || '').toLowerCase().includes(historyRecipientSearch.toLowerCase());
+                      const phoneMatch = (r.from_phone || cust?.phone || '').replace(/\D/g, '').includes(q);
+                      const msgMatch = (r.content || '').toLowerCase().includes(historyRecipientSearch.toLowerCase());
+                      return nameMatch || phoneMatch || msgMatch;
+                    }
+                    return true;
+                  });
+
+                  if (filteredReplies.length === 0) {
+                    return (
+                      <div className="py-12 text-center text-slate-400 font-medium italic text-xs space-y-2">
+                        <div className="text-2xl">💬</div>
+                        <p>No customer replies recorded for this campaign yet.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="divide-y divide-slate-100 dark:divide-slate-700/60 space-y-3">
+                      {filteredReplies.map(reply => {
+                        const cust = reply.customer_id ? customerMap.get(reply.customer_id) : null;
+                        const rawPhone = reply.from_phone || cust?.phone || 'Unknown Phone';
+                        const formattedPhone = formatPhoneNumber(rawPhone);
+
+                        return (
+                          <div key={reply.id} className="pt-3 pb-2 space-y-2 hover:bg-slate-50 dark:hover:bg-slate-800/40 p-3 rounded-xl transition-colors">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs font-black">
+                                  {cust?.name ? cust.name.charAt(0).toUpperCase() : '💬'}
+                                </div>
+                                <div>
+                                  <span className="font-extrabold text-slate-800 dark:text-white text-sm block">
+                                    {cust?.name || 'Customer Reply'}
+                                  </span>
+                                  <span className="text-xs text-slate-500 font-medium">
+                                    {formattedPhone}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-slate-400 font-semibold">
+                                  {new Date(reply.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    setSelectedHistoryCampaign(null);
+                                    setMainTab('responses');
+                                  }}
+                                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm transition-colors flex items-center gap-1"
+                                >
+                                  💬 Open in Inbox
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Message content bubble */}
+                            <div className="ml-12 p-3 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-medium border border-slate-200 dark:border-slate-700">
+                              "{reply.content}"
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
               ) : (
                 (() => {
                   let filtered = historyCampaignLogs.filter(log => {

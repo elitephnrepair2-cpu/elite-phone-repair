@@ -124,19 +124,21 @@ serve(async (req) => {
         continue
       }
 
-      // Fetch all tickets once to build a customer_id -> last_device lookup map
-      const customerIds = customers.map(c => c.id)
+      // Fetch all tickets once to build a per-customer merge context map
+      const customerIds = customers.map((c: any) => c.id)
       const { data: tickets } = await supabaseClient
         .from('tickets')
-        .select('customer_id, device, created_at')
+        .select('customer_id, device, problem_description, location, created_at')
         .in('customer_id', customerIds)
         .order('created_at', { ascending: false })
 
-      const deviceMap = new Map<string, string>()
+      // Build context map: customer_id -> { latestTicket, firstName, etc. }
+      // Uses the MOST RECENT ticket per customer (tickets already ordered desc)
+      const latestTicketMap = new Map<string, any>()
       if (tickets) {
         for (const t of tickets) {
-          if (!deviceMap.has(t.customer_id) && t.device) {
-            deviceMap.set(t.customer_id, t.device)
+          if (!latestTicketMap.has(t.customer_id)) {
+            latestTicketMap.set(t.customer_id, t)
           }
         }
       }
@@ -146,11 +148,33 @@ serve(async (req) => {
       const smsLogBuffer: any[] = []
 
       // Helper function to send single SMS
-      const sendSingleSms = async (customer: typeof customers[0]) => {
-        const lastDevice = deviceMap.get(customer.id) || 'your device'
+      const sendSingleSms = async (customer: any) => {
+        // Build merge context for this customer
+        const latest = latestTicketMap.get(customer.id) ?? null
+        const nameParts = (customer.name ?? '').trim().split(/\s+/)
+        const firstName = nameParts[0] ?? ''
+        const lastName = nameParts.slice(1).join(' ')
+
+        let lastRepairDate = ''
+        let lastRepairMonth = ''
+        if (latest?.created_at) {
+          const d = new Date(latest.created_at)
+          lastRepairDate = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+          lastRepairMonth = d.toLocaleDateString('en-US', { month: 'long' })
+        }
+
+        // Render the personalised message — supports all {{tag}} merge tags + legacy {name}/{device}
         let content = campaign.message_body
-          .replace(/{name}/g, customer.name)
-          .replace(/{device}/g, lastDevice)
+          .replace(/\{\{first_name\}\}/gi, firstName)
+          .replace(/\{\{last_name\}\}/gi, lastName)
+          .replace(/\{\{last_device\}\}/gi, latest?.device ?? '')
+          .replace(/\{\{last_repair_date\}\}/gi, lastRepairDate)
+          .replace(/\{\{last_repair_month\}\}/gi, lastRepairMonth)
+          .replace(/\{\{last_repair_issue\}\}/gi, latest?.problem_description ?? '')
+          .replace(/\{\{last_repair_location\}\}/gi, latest?.location ?? '')
+          // Legacy single-brace format (backward compatibility)
+          .replace(/\{name\}/g, customer.name ?? '')
+          .replace(/\{device\}/g, latest?.device ?? '')
 
         let normalizedPhone = customer.phone.replace(/[^\d+]/g, "")
         if (normalizedPhone.length === 10 && !normalizedPhone.startsWith('+')) {

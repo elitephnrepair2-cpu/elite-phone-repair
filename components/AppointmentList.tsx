@@ -2,22 +2,46 @@
 import React, { useState, useMemo, useRef } from 'react';
 import type { Appointment } from '../types';
 import AppointmentDetail from './AppointmentDetail';
+import AppointmentFormModal from './AppointmentFormModal';
 
 interface AppointmentListProps {
-  // FIX: Changed 'appointments' to 'Appointment[]' to correctly type the array of appointments.
   appointments: Appointment[];
+  currentLocation?: string;
   onUpdateStatus: (id: string, status: string) => Promise<void>;
   onConvertToTicket: (appointment: Appointment) => Promise<void>;
   onUpdateAppointment: (appointment: Appointment) => Promise<void>;
   onDeleteAppointment: (id: string) => Promise<void>;
+  onToggleSmsReminders?: (appointmentId: string, enabled: boolean) => Promise<void>;
+  onCreateAppointment?: (data: {
+    customer_name: string;
+    phone: string;
+    brand: string;
+    model: string;
+    issue: string;
+    date: string;
+    time_window: string;
+    location: string;
+    status: string;
+    sms_reminders_enabled: boolean;
+  }) => Promise<void>;
 }
 
 type FilterType = 'all' | 'today' | 'tomorrow' | 'week' | 'custom';
 
-const AppointmentList: React.FC<AppointmentListProps> = ({ appointments, onUpdateStatus, onConvertToTicket, onUpdateAppointment, onDeleteAppointment }) => {
+const AppointmentList: React.FC<AppointmentListProps> = ({ 
+  appointments, 
+  currentLocation = 'Beaumont',
+  onUpdateStatus, 
+  onConvertToTicket, 
+  onUpdateAppointment, 
+  onDeleteAppointment,
+  onToggleSmsReminders,
+  onCreateAppointment
+}) => {
   const [filter, setFilter] = useState<FilterType>('all');
   const [customDate, setCustomDate] = useState<string>('');
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   const filteredAppointments = useMemo(() => {
@@ -85,7 +109,20 @@ const AppointmentList: React.FC<AppointmentListProps> = ({ appointments, onUpdat
   return (
     <div className="h-full flex flex-col">
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4">
-            <h2 className="text-2xl font-bold text-slate-800">Appointments</h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-2xl font-bold text-slate-800">Appointments</h2>
+              {onCreateAppointment && (
+                <button
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md transition-all flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Schedule Appointment</span>
+                </button>
+              )}
+            </div>
             
             <div className="flex flex-wrap items-center gap-2">
                 <div className="flex bg-white rounded-lg shadow-sm p-1 border border-slate-200">
@@ -205,6 +242,15 @@ const AppointmentList: React.FC<AppointmentListProps> = ({ appointments, onUpdat
                 onConvertToTicket={onConvertToTicket}
                 onUpdateAppointment={onUpdateAppointment}
                 onDeleteAppointment={onDeleteAppointment}
+                onToggleSmsReminders={onToggleSmsReminders}
+            />
+        )}
+
+        {isCreateModalOpen && onCreateAppointment && (
+            <AppointmentFormModal
+                currentLocation={currentLocation}
+                onClose={() => setIsCreateModalOpen(false)}
+                onSubmit={onCreateAppointment}
             />
         )}
     </div>

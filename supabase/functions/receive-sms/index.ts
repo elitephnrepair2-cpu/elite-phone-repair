@@ -91,6 +91,51 @@ serve(async (req) => {
       }
     }
 
+    // 3. [AUTOMATION] — Reply nudge for condition nodes waiting on "has_replied"
+    // If this customer has an active enrollment currently on a condition node,
+    // set next_execution_at to now so the scheduler processes it immediately.
+    // This does NOT change any other behavior; it is purely a read+update on automation_enrollments.
+    if (customer && !isOptOut) {
+      try {
+        const { data: activeEnrollments } = await supabaseClient
+          .from('automation_enrollments')
+          .select('id, current_node_id')
+          .eq('contact_id', customer.id)
+          .eq('status', 'active')
+          .is('processing_locked_at', null)
+
+        if (activeEnrollments && activeEnrollments.length > 0) {
+          // Check if any of the current nodes are condition nodes
+          const nodeIds = activeEnrollments.map((e: any) => e.current_node_id).filter(Boolean)
+          if (nodeIds.length > 0) {
+            const { data: conditionNodes } = await supabaseClient
+              .from('automation_nodes')
+              .select('id')
+              .in('id', nodeIds)
+              .eq('type', 'condition')
+
+            if (conditionNodes && conditionNodes.length > 0) {
+              const conditionNodeIdSet = new Set(conditionNodes.map((n: any) => n.id))
+              const enrollmentsToNudge = activeEnrollments
+                .filter((e: any) => conditionNodeIdSet.has(e.current_node_id))
+                .map((e: any) => e.id)
+
+              if (enrollmentsToNudge.length > 0) {
+                await supabaseClient
+                  .from('automation_enrollments')
+                  .update({ next_execution_at: new Date().toISOString() })
+                  .in('id', enrollmentsToNudge)
+                console.log(`Nudged ${enrollmentsToNudge.length} automation enrollment(s) for customer ${customer.id} due to inbound reply.`)
+              }
+            }
+          }
+        }
+      } catch (nudgeErr) {
+        // Never let automation nudge logic interrupt SMS ingestion
+        console.error('Automation reply nudge error (non-critical):', nudgeErr)
+      }
+    }
+
     // Return empty TwiML response to Twilio
     const twiml = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
 

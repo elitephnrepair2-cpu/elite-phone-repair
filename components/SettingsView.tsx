@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import type { ShopSettings } from '../types';
+import type { ShopSettings, AppointmentSmsSettings } from '../types';
+import { renderAppointmentTemplate } from '../services/appointmentSmsService';
 
 interface SettingsViewProps {
   settings: ShopSettings;
@@ -42,16 +43,52 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
         .order('brand', { ascending: true })
         .order('model', { ascending: true })
         .order('category', { ascending: true });
-      if (!error && data) {
-        setDbPrices(data);
-      }
     } catch (e) {
       console.error("Error fetching repair prices:", e);
     }
   };
 
+  // Appointment SMS Automations State
+  const [smsConfig, setSmsConfig] = useState<Partial<AppointmentSmsSettings>>({
+    location: currentLocation || 'Beaumont',
+    dry_run: true,
+    test_phone_number: '',
+    quiet_hours_enabled: true,
+    quiet_hours_start: '08:00',
+    quiet_hours_end: '22:00',
+    timezone: 'America/Chicago',
+    enable_immediate_confirmation: true,
+    enable_reminder_24h: true,
+    enable_reminder_2h: true,
+    enable_missed_appointment: true,
+    template_immediate_confirmation: 'Your appointment with Elite Phone Repair is confirmed for {{appointment_date}} at {{appointment_time}}.\nDevice: {{device}}\nRepair: {{repair_issue}}\nLocation: {{location_address}}\nIf anything changes, reply here and let us know.',
+    template_reminder_24h: 'Reminder: You’re scheduled with Elite Phone Repair tomorrow at {{appointment_time}} for your {{device}}.\nLocation: {{location_address}}\nNeed to reschedule? Reply here and let us know.',
+    template_reminder_2h: 'Your appointment with Elite Phone Repair is coming up today at {{appointment_time}}.\nLocation: {{location_address}}\nReply here if you need anything.',
+    template_missed_appointment: 'Hey, it’s Elite Phone Repair. We missed you for your {{device}} appointment today. Do you still need it fixed? Reply here and we’ll help you find another time.'
+  });
+  const [activeTemplateTab, setActiveTemplateTab] = useState<'immediate' | 'reminder_24h' | 'reminder_2h' | 'missed'>('immediate');
+  const [isSavingSmsSettings, setIsSavingSmsSettings] = useState(false);
+
+  const fetchSmsSettings = async () => {
+    try {
+      const loc = currentLocation || 'Beaumont';
+      const { data } = await supabase
+        .from('appointment_sms_settings')
+        .select('*')
+        .eq('location', loc)
+        .maybeSingle();
+
+      if (data) {
+        setSmsConfig(data);
+      }
+    } catch (e) {
+      console.error("Error loading appointment_sms_settings:", e);
+    }
+  };
+
   useEffect(() => {
     fetchPrices();
+    fetchSmsSettings();
   }, []);
 
   // Group rows by Brand -> Model -> Category
@@ -248,6 +285,67 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
   // Shared classes for high-visibility inputs
   const inputClasses = "w-full px-4 py-2.5 bg-white text-slate-900 border border-slate-400 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 shadow-sm transition-all text-base";
 
+  const handleSaveSmsSettings = async () => {
+    setIsSavingSmsSettings(true);
+    try {
+      const loc = currentLocation || 'Beaumont';
+      const { error } = await supabase
+        .from('appointment_sms_settings')
+        .upsert({
+          ...smsConfig,
+          location: loc,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'location' });
+
+      if (error) {
+        console.error("Failed to save SMS settings:", error);
+        alert("Failed to save appointment SMS settings.");
+      } else {
+        alert("Appointment SMS Settings saved successfully!");
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSavingSmsSettings(false);
+    }
+  };
+
+  const getActiveTemplateKey = () => {
+    switch (activeTemplateTab) {
+      case 'immediate': return 'template_immediate_confirmation';
+      case 'reminder_24h': return 'template_reminder_24h';
+      case 'reminder_2h': return 'template_reminder_2h';
+      case 'missed': return 'template_missed_appointment';
+    }
+  };
+
+  const getActiveTemplateText = () => {
+    return (smsConfig as any)[getActiveTemplateKey()] || '';
+  };
+
+  const updateActiveTemplateText = (text: string) => {
+    const key = getActiveTemplateKey();
+    setSmsConfig(prev => ({ ...prev, [key]: text }));
+  };
+
+  const insertPlaceholder = (tag: string) => {
+    const currentText = getActiveTemplateText();
+    updateActiveTemplateText(currentText + ' ' + tag);
+  };
+
+  const samplePreviewText = renderAppointmentTemplate(
+    getActiveTemplateText(),
+    {
+      customer_name: 'Jane Doe',
+      brand: 'Apple',
+      model: 'iPhone 15 Pro',
+      issue: 'Screen Replacement',
+      date: '2026-09-15',
+      time_window: '10:00 AM - 11:00 AM'
+    },
+    form.address || '123 Main St, Beaumont TX'
+  );
+
   return (
     <div className="max-w-4xl mx-auto h-full pb-12">
       <div className="flex justify-between items-center mb-8">
@@ -304,6 +402,161 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
                 className={inputClasses}
                 placeholder="2215 Calder Ave STE 201..."
               />
+            </div>
+          </div>
+        </div>
+
+        {/* APPOINTMENT SMS AUTOMATIONS SECTION */}
+        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+          <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
+              Appointment SMS Automations
+            </h3>
+
+            <div className="flex items-center gap-3">
+              <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase border ${
+                smsConfig.dry_run !== false
+                  ? 'bg-amber-100 text-amber-800 border-amber-300'
+                  : 'bg-green-100 text-green-800 border-green-300'
+              }`}>
+                {smsConfig.dry_run !== false ? 'Dry-Run Mode (OFF)' : 'LIVE Mode (ON)'}
+              </span>
+              <button
+                type="button"
+                onClick={handleSaveSmsSettings}
+                disabled={isSavingSmsSettings}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow transition-all"
+              >
+                {isSavingSmsSettings ? 'Saving...' : 'Save SMS Templates'}
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Safety Mode & Quiet Hours */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-5 rounded-2xl border border-slate-200">
+              <div>
+                <label className="flex items-center justify-between font-bold text-slate-800 text-sm mb-1">
+                  <span>Dry-Run Safety Mode</span>
+                  <input
+                    type="checkbox"
+                    checked={smsConfig.dry_run !== false}
+                    onChange={(e) => setSmsConfig(prev => ({ ...prev, dry_run: e.target.checked }))}
+                    className="w-4 h-4 text-red-600 rounded"
+                  />
+                </label>
+                <p className="text-xs text-slate-500">
+                  When enabled, reminder jobs are logged safely without contacting Twilio or real customers. Uncheck to activate live SMS sending.
+                </p>
+              </div>
+
+              <div>
+                <label className="flex items-center justify-between font-bold text-slate-800 text-sm mb-1">
+                  <span>Quiet Hours Window (America/Chicago)</span>
+                  <input
+                    type="checkbox"
+                    checked={smsConfig.quiet_hours_enabled !== false}
+                    onChange={(e) => setSmsConfig(prev => ({ ...prev, quiet_hours_enabled: e.target.checked }))}
+                    className="w-4 h-4 text-red-600 rounded"
+                  />
+                </label>
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="time"
+                    value={smsConfig.quiet_hours_start || '08:00'}
+                    onChange={(e) => setSmsConfig(prev => ({ ...prev, quiet_hours_start: e.target.value }))}
+                    className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold"
+                  />
+                  <span className="text-xs font-bold text-slate-400">to</span>
+                  <input
+                    type="time"
+                    value={smsConfig.quiet_hours_end || '22:00'}
+                    onChange={(e) => setSmsConfig(prev => ({ ...prev, quiet_hours_end: e.target.value }))}
+                    className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold"
+                  />
+                  <span className="text-xs text-slate-500 font-medium ml-1">(Default 8am - 10pm)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Template Selector Tabs */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-3">Editable Message Templates</label>
+              <div className="flex bg-slate-100 p-1 rounded-xl gap-1 mb-4 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setActiveTemplateTab('immediate')}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    activeTemplateTab === 'immediate' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Immediate Confirmation
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTemplateTab('reminder_24h')}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    activeTemplateTab === 'reminder_24h' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  24 Hours Before
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTemplateTab('reminder_2h')}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    activeTemplateTab === 'reminder_2h' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  2 Hours Before
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTemplateTab('missed')}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    activeTemplateTab === 'missed' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Missed Appointment
+                </button>
+              </div>
+
+              {/* Placeholder Helper Buttons */}
+              <div className="flex flex-wrap gap-2 mb-3">
+                <span className="text-xs font-bold text-slate-400 self-center">Insert Variable:</span>
+                {['{{appointment_date}}', '{{appointment_time}}', '{{device}}', '{{repair_issue}}', '{{location_address}}'].map(tag => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => insertPlaceholder(tag)}
+                    className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-mono text-[11px] font-bold rounded-lg border border-slate-200 transition-colors"
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+
+              {/* Template Text Area */}
+              <textarea
+                rows={4}
+                value={getActiveTemplateText()}
+                onChange={(e) => updateActiveTemplateText(e.target.value)}
+                className="w-full p-4 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
+              />
+
+              {/* Real-time Rendered Text Preview */}
+              <div className="mt-4 p-4 bg-slate-900 text-slate-100 rounded-xl border border-slate-800">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Live SMS Customer Preview</span>
+                  <span className="text-[10px] font-mono text-green-400">America/Chicago Timezone</span>
+                </div>
+                <p className="text-xs leading-relaxed whitespace-pre-wrap font-sans">
+                  {samplePreviewText}
+                </p>
+              </div>
             </div>
           </div>
         </div>

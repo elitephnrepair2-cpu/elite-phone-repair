@@ -26,6 +26,7 @@ import QuoteForm from './components/QuoteForm';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { REPAIR_PRICES } from './constants/prices';
 import { sendSmsIfAllowed } from './services/smsService';
+import { scheduleAppointmentSmsSequence, cancelAppointmentSmsJobs, scheduleMissedAppointmentSms } from './services/appointmentSmsService';
 import { StaffUser, signOutStaff } from './services/authService';
 import { StaffLoginView } from './components/StaffLoginView';
 
@@ -640,6 +641,125 @@ const App: React.FC = () => {
     setTimeout(() => setEdgeSmsStatus(null), 5000);
   };
 
+  const handleCreateAppointment = async (data: {
+    customer_name: string;
+    phone: string;
+    brand: string;
+    model: string;
+    issue: string;
+    date: string;
+    time_window: string;
+    location: string;
+    status: string;
+    sms_reminders_enabled: boolean;
+  }) => {
+    let customerId: string | null = null;
+    const cleanPhone = data.phone.replace(/\D/g, '');
+    
+    if (cleanPhone.length >= 10) {
+      const { data: existingCust } = await supabase
+        .from('customers')
+        .select('id')
+        .or(`phone.eq.${cleanPhone},phone.eq.${data.phone}`)
+        .maybeSingle();
+
+      if (existingCust) {
+        customerId = existingCust.id;
+      } else {
+        const { data: newCust } = await supabase
+          .from('customers')
+          .insert({
+            name: data.customer_name,
+            phone: data.phone,
+            location: data.location || currentLocation,
+            transactional_sms_consent: true,
+            consent_source: 'Appointment Scheduling'
+          })
+          .select('id')
+          .maybeSingle();
+        if (newCust) customerId = newCust.id;
+      }
+    }
+
+    const locationAddress = settings.address || 'our shop';
+
+    const { data: insertedAppt, error } = await supabase
+      .from('appointments')
+      .insert({
+        ...data,
+        location_address: locationAddress,
+        version: 1
+      })
+      .select()
+      .single();
+
+    if (error || !insertedAppt) {
+      throw new Error(error?.message || "Failed to create appointment.");
+    }
+
+    if (data.sms_reminders_enabled) {
+      await scheduleAppointmentSmsSequence(insertedAppt, customerId, false);
+    }
+
+    await fetchData();
+  };
+
+  const handleUpdateAppointmentStatus = async (id: string, newStatus: string) => {
+    const now = new Date().toISOString();
+    const updatePayload: any = { status: newStatus };
+    if (newStatus === 'checked_in' || newStatus === 'arrived') updatePayload.arrived_at = now;
+    if (newStatus === 'cancelled') updatePayload.cancelled_at = now;
+    if (newStatus === 'no_show') updatePayload.no_show_at = now;
+
+    await supabase.from('appointments').update(updatePayload).eq('id', id);
+    const updatedAppt = appointments.find(a => a.id === id);
+
+    if (updatedAppt) {
+      const targetAppt = { ...updatedAppt, status: newStatus };
+      if (['checked_in', 'completed', 'arrived', 'cancelled'].includes(newStatus)) {
+        await cancelAppointmentSmsJobs(id, `Appointment status changed to ${newStatus}`);
+      } else if (newStatus === 'no_show') {
+        await scheduleMissedAppointmentSms(targetAppt);
+      }
+    }
+    fetchData();
+  };
+
+  const handleUpdateAppointment = async (updatedAppt: Appointment) => {
+    const { error } = await supabase
+      .from('appointments')
+      .update(updatedAppt)
+      .eq('id', updatedAppt.id);
+
+    if (error) {
+      alert("Error updating appointment: " + error.message);
+      return;
+    }
+
+    if (updatedAppt.sms_reminders_enabled !== false) {
+      await scheduleAppointmentSmsSequence(updatedAppt, null, true);
+    }
+    fetchData();
+  };
+
+  const handleToggleSmsReminders = async (appointmentId: string, enabled: boolean) => {
+    await supabase
+      .from('appointments')
+      .update({ sms_reminders_enabled: enabled })
+      .eq('id', appointmentId);
+
+    const appt = appointments.find(a => a.id === appointmentId);
+    if (appt) {
+      const updated = { ...appt, sms_reminders_enabled: enabled };
+      if (!enabled) {
+        await cancelAppointmentSmsJobs(appointmentId, 'SMS reminders paused by staff');
+      } else {
+        await scheduleAppointmentSmsSequence(updated, null, false);
+      }
+    }
+    fetchData();
+  };
+
   const renderContent = () => {
     // Kiosk views and public widgets are accessible without staff login
     if (view === 'kiosk') {
@@ -833,13 +953,21 @@ const App: React.FC = () => {
           onTogglePaid={handleMarkAsPaid}
           onTriggerRepairCompleted={handleNotifyCustomer}
         /> : null;
+
       case 'appointments_dashboard':
         return <AppointmentList
           appointments={appointments}
-          onUpdateStatus={async (id, status) => { await supabase.from('appointments').update({ status }).eq('id', id); fetchData(); }}
+          currentLocation={currentLocation}
+          onUpdateStatus={handleUpdateAppointmentStatus}
           onConvertToTicket={async () => { alert("Select customer in dashboard."); setView('dashboard'); }}
-          onUpdateAppointment={async (appt) => { await supabase.from('appointments').update(appt).eq('id', appt.id); fetchData(); }}
-          onDeleteAppointment={async (id) => { await supabase.from('appointments').delete().eq('id', id); fetchData(); }}
+          onUpdateAppointment={handleUpdateAppointment}
+          onDeleteAppointment={async (id) => {
+            await cancelAppointmentSmsJobs(id, 'Appointment deleted');
+            await supabase.from('appointments').delete().eq('id', id);
+            fetchData();
+          }}
+          onToggleSmsReminders={handleToggleSmsReminders}
+          onCreateAppointment={handleCreateAppointment}
         />;
       case 'parts_dashboard':
         return <PartsDashboard
