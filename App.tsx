@@ -863,9 +863,9 @@ const App: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setView('dashboard_list')}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors flex items-center gap-1"
                 >
-                  Today's List
+                  📅 Intakes by Date
                 </button>
               </div>
             </div>
@@ -911,9 +911,9 @@ const App: React.FC = () => {
                     </button>
                     <button
                       onClick={() => setView('dashboard_list')}
-                      className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-bold shadow-sm"
+                      className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-bold shadow-sm flex items-center gap-1"
                     >
-                      Today's List
+                      📅 Intakes by Date
                     </button>
                   </div>
                 </div>
