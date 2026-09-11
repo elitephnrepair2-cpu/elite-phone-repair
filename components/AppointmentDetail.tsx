@@ -70,6 +70,13 @@ const AppointmentDetail: React.FC<AppointmentDetailProps> = ({
 
   const handleProcessNow = async () => {
     setIsProcessingNow(true);
+    // Reset any failed jobs for this appointment back to pending for retry
+    await supabase
+      .from('appointment_sms_jobs')
+      .update({ status: 'pending', error_message: null, claimed_at: null })
+      .eq('appointment_id', appointment.id)
+      .eq('status', 'failed');
+
     await triggerAppointmentSmsProcessor();
     await loadSmsJobs();
     setIsProcessingNow(false);
@@ -380,9 +387,16 @@ const AppointmentDetail: React.FC<AppointmentDetailProps> = ({
                             Scheduled: {new Date(job.scheduled_for).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </p>
                           {(job.skip_reason || job.error_message) && (
-                            <p className="text-[10px] text-amber-700 italic mt-0.5">
-                              Note: {job.skip_reason || job.error_message}
-                            </p>
+                            <div className="mt-0.5">
+                              <p className="text-[10px] text-amber-700 italic">
+                                Note: {job.skip_reason || job.error_message}
+                              </p>
+                              {(job.error_message || '').toLowerCase().includes('unsubscribed') && (
+                                <p className="text-[10px] text-red-600 font-semibold mt-0.5">
+                                  💡 Tip: Have customer text <span className="font-mono bg-red-50 px-1 py-0.5 rounded border border-red-200">START</span> to (844) 741-4579 to unblock.
+                                </p>
+                              )}
+                            </div>
                           )}
                         </div>
 
