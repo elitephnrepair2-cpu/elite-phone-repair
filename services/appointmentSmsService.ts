@@ -486,10 +486,14 @@ export async function processInboundAppointmentReply(
           .update({ status: 'confirmed' })
           .eq('id', appt.id);
 
+        const settings = await getAppointmentSmsSettings(appt.location || 'Beaumont');
+        const replyTemplate = settings?.template_confirmation_reply || "Thanks! Your appointment with Elite Phone Repair is confirmed. We look forward to seeing you!";
+        const renderedReply = renderAppointmentTemplate(replyTemplate, appt, appt.location_address || 'our shop');
+
         return {
           handled: true,
           action: 'confirmed',
-          replyMessage: "Thanks! Your appointment with Elite Phone Repair is confirmed. We look forward to seeing you!"
+          replyMessage: renderedReply
         };
       }
     }
@@ -513,10 +517,14 @@ export async function processInboundAppointmentReply(
 
         await cancelAppointmentSmsJobs(appt.id, 'Customer replied CANCEL');
 
+        const settings = await getAppointmentSmsSettings(appt.location || 'Beaumont');
+        const replyTemplate = settings?.template_cancellation_reply || "Your appointment has been cancelled. Reply here or call us anytime if you would like to reschedule!";
+        const renderedReply = renderAppointmentTemplate(replyTemplate, appt, appt.location_address || 'our shop');
+
         return {
           handled: true,
           action: 'cancelled',
-          replyMessage: "Your appointment has been cancelled. Reply here or call us anytime if you would like to reschedule!"
+          replyMessage: renderedReply
         };
       }
     }

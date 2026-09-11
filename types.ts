@@ -315,6 +315,8 @@ export type Database = {
           template_reminder_24h: string
           template_reminder_2h: string
           template_missed_appointment: string
+          template_confirmation_reply?: string
+          template_cancellation_reply?: string
           created_at: string
           updated_at: string
         }
@@ -335,6 +337,8 @@ export type Database = {
           template_reminder_24h?: string
           template_reminder_2h?: string
           template_missed_appointment?: string
+          template_confirmation_reply?: string
+          template_cancellation_reply?: string
           created_at?: string
           updated_at?: string
         }
@@ -355,6 +359,8 @@ export type Database = {
           template_reminder_24h?: string
           template_reminder_2h?: string
           template_missed_appointment?: string
+          template_confirmation_reply?: string
+          template_cancellation_reply?: string
           created_at?: string
           updated_at?: string
         }

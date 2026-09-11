@@ -115,7 +115,14 @@ serve(async (req) => {
           .update({ status: 'confirmed' })
           .eq('id', appt.id)
 
-        twimlResponseText = "Thanks! Your appointment with Elite Phone Repair has been confirmed. We look forward to seeing you!"
+        // Fetch location settings for custom reply
+        const { data: settings } = await supabaseClient
+          .from('appointment_sms_settings')
+          .select('*')
+          .eq('location', appt.location || 'Beaumont')
+          .maybeSingle()
+
+        twimlResponseText = settings?.template_confirmation_reply || "Thanks! Your appointment with Elite Phone Repair is confirmed. We look forward to seeing you!"
       }
     } else if (isCancelReply) {
       const { data: appt } = await supabaseClient
@@ -144,7 +151,14 @@ serve(async (req) => {
           .eq('appointment_id', appt.id)
           .eq('status', 'pending')
 
-        twimlResponseText = "Your appointment has been cancelled. Reply here or call us anytime if you would like to reschedule!"
+        // Fetch location settings for custom reply
+        const { data: settings } = await supabaseClient
+          .from('appointment_sms_settings')
+          .select('*')
+          .eq('location', appt.location || 'Beaumont')
+          .maybeSingle()
+
+        twimlResponseText = settings?.template_cancellation_reply || "Your appointment has been cancelled. Reply here or call us anytime if you would like to reschedule!"
       }
     }
 

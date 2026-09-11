@@ -50,9 +50,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
 
   // Appointment SMS Automations State
   const [smsConfig, setSmsConfig] = useState<Partial<AppointmentSmsSettings>>({
-    location: currentLocation || 'Beaumont',
-    dry_run: true,
-    test_phone_number: '',
+    location: 'Beaumont',
+    dry_run: false,
     quiet_hours_enabled: true,
     quiet_hours_start: '08:00',
     quiet_hours_end: '22:00',
@@ -64,10 +63,53 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
     template_immediate_confirmation: 'Your appointment with Elite Phone Repair is set for {{appointment_date}} at {{appointment_time}}.\nDevice: {{device}}\nRepair: {{repair_issue}}\nLocation: {{location_address}}\n\nReply YES to confirm your appointment, or reply CANCEL to cancel.',
     template_reminder_24h: 'Reminder: You’re scheduled with Elite Phone Repair tomorrow at {{appointment_time}} for your {{device}}.\nLocation: {{location_address}}\nNeed to reschedule? Reply here and let us know.',
     template_reminder_2h: 'Your appointment with Elite Phone Repair is coming up today at {{appointment_time}}.\nLocation: {{location_address}}\nReply here if you need anything.',
-    template_missed_appointment: 'Hey, it’s Elite Phone Repair. We missed you for your {{device}} appointment today. Do you still need it fixed? Reply here and we’ll help you find another time.'
+    template_missed_appointment: 'Hey, it’s Elite Phone Repair. We missed you for your {{device}} appointment today. Do you still need it fixed? Reply here and we’ll help you find another time.',
+    template_confirmation_reply: 'Thanks! Your appointment with Elite Phone Repair is confirmed. We look forward to seeing you!',
+    template_cancellation_reply: 'Your appointment has been cancelled. Reply here or call us anytime if you would like to reschedule!'
   });
-  const [activeTemplateTab, setActiveTemplateTab] = useState<'immediate' | 'reminder_24h' | 'reminder_2h' | 'missed'>('immediate');
+  const [activeTemplateTab, setActiveTemplateTab] = useState<'immediate' | 'reminder_24h' | 'reminder_2h' | 'missed' | 'confirm_reply' | 'cancel_reply'>('immediate');
   const [isSavingSmsSettings, setIsSavingSmsSettings] = useState(false);
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSaveSettings(form);
+    alert('Settings saved successfully!');
+  };
+
+  const handleSaveSmsSettings = async () => {
+    setIsSavingSmsSettings(true);
+    try {
+      const { error } = await supabase
+        .from('appointment_sms_settings')
+        .upsert([{
+          ...smsConfig,
+          location: cloverLocation || 'Beaumont',
+          updated_at: new Date().toISOString()
+        }], { onConflict: 'location' });
+
+      if (error) {
+        console.error("Failed to save SMS settings:", error);
+        alert("Failed to save appointment SMS settings.");
+      } else {
+        alert("Appointment SMS Settings saved successfully!");
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSavingSmsSettings(false);
+    }
+  };
+
+  const getActiveTemplateKey = () => {
+    switch (activeTemplateTab) {
+      case 'immediate': return 'template_immediate_confirmation';
+      case 'reminder_24h': return 'template_reminder_24h';
+      case 'reminder_2h': return 'template_reminder_2h';
+      case 'missed': return 'template_missed_appointment';
+      case 'confirm_reply': return 'template_confirmation_reply';
+      case 'cancel_reply': return 'template_cancellation_reply';
+    }
+  };
 
   const fetchSmsSettings = async () => {
     try {
@@ -521,6 +563,24 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
                   }`}
                 >
                   Missed Appointment
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTemplateTab('confirm_reply')}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    activeTemplateTab === 'confirm_reply' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  YES Reply Response
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTemplateTab('cancel_reply')}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    activeTemplateTab === 'cancel_reply' ? 'bg-white text-amber-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  CANCEL Reply Response
                 </button>
               </div>
 
