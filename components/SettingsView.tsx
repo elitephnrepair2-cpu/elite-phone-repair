@@ -61,7 +61,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
     enable_reminder_24h: true,
     enable_reminder_2h: true,
     enable_missed_appointment: true,
-    template_immediate_confirmation: 'Your appointment with Elite Phone Repair is confirmed for {{appointment_date}} at {{appointment_time}}.\nDevice: {{device}}\nRepair: {{repair_issue}}\nLocation: {{location_address}}\nIf anything changes, reply here and let us know.',
+    template_immediate_confirmation: 'Your appointment with Elite Phone Repair is set for {{appointment_date}} at {{appointment_time}}.\nDevice: {{device}}\nRepair: {{repair_issue}}\nLocation: {{location_address}}\n\nReply YES to confirm your appointment, or reply CANCEL to cancel.',
     template_reminder_24h: 'Reminder: You’re scheduled with Elite Phone Repair tomorrow at {{appointment_time}} for your {{device}}.\nLocation: {{location_address}}\nNeed to reschedule? Reply here and let us know.',
     template_reminder_2h: 'Your appointment with Elite Phone Repair is coming up today at {{appointment_time}}.\nLocation: {{location_address}}\nReply here if you need anything.',
     template_missed_appointment: 'Hey, it’s Elite Phone Repair. We missed you for your {{device}} appointment today. Do you still need it fixed? Reply here and we’ll help you find another time.'

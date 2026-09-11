@@ -50,11 +50,12 @@ CREATE TABLE IF NOT EXISTS public.appointment_sms_settings (
   enable_reminder_24h BOOLEAN DEFAULT true,
   enable_reminder_2h BOOLEAN DEFAULT true,
   enable_missed_appointment BOOLEAN DEFAULT true,
-  template_immediate_confirmation TEXT DEFAULT 'Your appointment with Elite Phone Repair is confirmed for {{appointment_date}} at {{appointment_time}}.
+  template_immediate_confirmation TEXT DEFAULT 'Your appointment with Elite Phone Repair is set for {{appointment_date}} at {{appointment_time}}.
 Device: {{device}}
 Repair: {{repair_issue}}
 Location: {{location_address}}
-If anything changes, reply here and let us know.',
+
+Reply YES to confirm your appointment, or reply CANCEL to cancel.',
   template_reminder_24h TEXT DEFAULT 'Reminder: You’re scheduled with Elite Phone Repair tomorrow at {{appointment_time}} for your {{device}}.
 Location: {{location_address}}
 Need to reschedule? Reply here and let us know.',
