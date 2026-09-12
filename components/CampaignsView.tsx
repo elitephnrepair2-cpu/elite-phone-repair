@@ -22,6 +22,7 @@ interface CampaignsViewProps {
   showConfirm: (message: string, onConfirm: () => void) => void;
   onViewCustomer?: (customerId: string) => void;
   onViewTicket?: (ticketId: string) => void;
+  onGoToMessenger?: () => void;
 }
 
 const CampaignsView: React.FC<CampaignsViewProps> = ({ 
@@ -31,7 +32,8 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
   showAlert,
   showConfirm,
   onViewCustomer,
-  onViewTicket
+  onViewTicket,
+  onGoToMessenger
 }) => {
   const [mainTab, setMainTab] = useState<'broadcasts' | 'responses'>('broadcasts');
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([]);
@@ -790,6 +792,18 @@ const CampaignsView: React.FC<CampaignsViewProps> = ({
           </svg>
           Customer SMS Responses & Inbox
         </button>
+
+        {onGoToMessenger && (
+          <button
+            onClick={onGoToMessenger}
+            className="flex-1 py-3 rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2 transition-all text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-800/50"
+          >
+            <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.477 2 2 6.145 2 11.258c0 2.91 1.455 5.51 3.733 7.188-.195.973-.772 2.617-.893 3.013-.083.272.183.518.441.389 1.135-.568 2.67-1.393 3.712-1.922.955.26 1.97.4 3.007.4 5.523 0 10-4.145 10-9.258C22 6.145 17.523 2 12 2zm1.293 12.707l-2.793-2.978-5.45 2.978 5.992-6.36 2.825 2.978 5.418-2.978-5.992 6.36z" />
+            </svg>
+            Facebook Messenger Inbox
+          </button>
+        )}
       </div>
 
       {mainTab === 'responses' ? (

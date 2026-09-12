@@ -291,10 +291,32 @@ export const Header: React.FC<HeaderProps> = ({
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
                                 </svg>
                                 <div>
-                                    <div className="text-white">Campaigns & Messaging</div>
-                                    <div className="text-[11px] text-amber-300/80 font-normal">SMS Broadcasts & Inbox Replies</div>
+                                    <div className="text-white">Campaigns & SMS</div>
+                                    <div className="text-[11px] text-amber-300/80 font-normal">SMS Broadcasts & Inbox</div>
                                 </div>
                             </button>
+
+                            {onGoToMessenger && (
+                                <button
+                                    onClick={() => {
+                                        onGoToMessenger();
+                                        setIsDrawerOpen(false);
+                                    }}
+                                    className={`w-full flex items-center gap-3.5 px-4 py-3 text-left font-bold rounded-xl transition-colors ${
+                                        currentView === 'messenger'
+                                            ? 'bg-blue-500/20 text-white border border-blue-400/40'
+                                            : 'text-slate-200 hover:bg-slate-800 hover:text-white border border-transparent'
+                                    }`}
+                                >
+                                    <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 2C6.477 2 2 6.145 2 11.258c0 2.91 1.455 5.51 3.733 7.188-.195.973-.772 2.617-.893 3.013-.083.272.183.518.441.389 1.135-.568 2.67-1.393 3.712-1.922.955.26 1.97.4 3.007.4 5.523 0 10-4.145 10-9.258C22 6.145 17.523 2 12 2zm1.293 12.707l-2.793-2.978-5.45 2.978 5.992-6.36 2.825 2.978 5.418-2.978-5.992 6.36z" />
+                                    </svg>
+                                    <div>
+                                        <div className="text-white">Facebook Messenger</div>
+                                        <div className="text-[11px] text-blue-300/80 font-normal">Meta Page Inbox & Chat</div>
+                                    </div>
+                                </button>
+                            )}
 
                             <button
                                 onClick={() => {

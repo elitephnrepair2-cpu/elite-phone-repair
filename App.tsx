@@ -1044,6 +1044,7 @@ const App: React.FC = () => {
             setSelectedCustomerId(id);
             setView('view_customer' as View);
           }}
+          onGoToMessenger={() => setView('messenger')}
         />;
       case 'messages':
         return <SMSInboxView
