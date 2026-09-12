@@ -13,6 +13,7 @@ interface HeaderProps {
     onGoToCampaigns: () => void;
     onGoToAnalytics: () => void;
     onGoToMessages?: () => void;
+    onGoToMessenger?: () => void;
     onGoToQuoteWidget?: () => void;
     currentLocation: string;
     onLocationChange: (location: string) => void;
@@ -35,6 +36,7 @@ export const Header: React.FC<HeaderProps> = ({
     onGoToCampaigns,
     onGoToAnalytics,
     onGoToMessages,
+    onGoToMessenger,
     onGoToQuoteWidget,
     currentLocation,
     onLocationChange,
@@ -96,8 +98,26 @@ export const Header: React.FC<HeaderProps> = ({
                             <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
                             </svg>
-                            <span className="hidden sm:inline">Campaigns & Messaging</span>
+                            <span className="hidden sm:inline">Campaigns & SMS</span>
                         </button>
+
+                        {/* Facebook Messenger Button */}
+                        {onGoToMessenger && (
+                            <button
+                                onClick={onGoToMessenger}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold shadow-sm transition-all flex items-center gap-1.5 border ${
+                                    currentView === 'messenger'
+                                        ? 'bg-blue-600 text-white border-blue-600'
+                                        : 'bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-100'
+                                }`}
+                                title="Facebook Messenger CRM Inbox"
+                            >
+                                <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2C6.477 2 2 6.145 2 11.258c0 2.91 1.455 5.51 3.733 7.188-.195.973-.772 2.617-.893 3.013-.083.272.183.518.441.389 1.135-.568 2.67-1.393 3.712-1.922.955.26 1.97.4 3.007.4 5.523 0 10-4.145 10-9.258C22 6.145 17.523 2 12 2zm1.293 12.707l-2.793-2.978-5.45 2.978 5.992-6.36 2.825 2.978 5.418-2.978-5.992 6.36z" />
+                                </svg>
+                                <span className="hidden sm:inline">Messenger Inbox</span>
+                            </button>
+                        )}
 
                         {/* Dark Mode Toggle */}
                         <button

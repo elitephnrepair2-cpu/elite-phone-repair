@@ -1,0 +1,4 @@
+project_id = "elite-phone-repair"
+
+[functions.receive-facebook-messenger]
+verify_jwt = false

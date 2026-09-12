@@ -21,6 +21,7 @@ import CampaignsView from './components/CampaignsView';
 import { FrontDeskPortal } from './components/FrontDeskPortal';
 import { AnalyticsView } from './components/AnalyticsView';
 import { SMSInboxView } from './components/SMSInboxView';
+import { FacebookMessengerInboxView } from './components/FacebookMessengerInboxView';
 import QuoteList from './components/QuoteList';
 import QuoteForm from './components/QuoteForm';
 import { useLocalStorage } from './hooks/useLocalStorage';
@@ -1055,6 +1056,15 @@ const App: React.FC = () => {
           }}
           showAlert={showAlert}
         />;
+      case 'messenger':
+        return <FacebookMessengerInboxView
+          customers={customers}
+          onViewCustomer={(id) => {
+            setSelectedCustomerId(id);
+            setView('view_customer' as View);
+          }}
+          showAlert={showAlert}
+        />;
       case 'analytics':
         return <AnalyticsView
           customers={customers}
@@ -1084,6 +1094,7 @@ const App: React.FC = () => {
           onGoToQuoteWidget={() => setView('quote_widget')}
           onGoToAnalytics={handleOpenAnalytics}
           onGoToMessages={() => setView('messages')}
+          onGoToMessenger={() => setView('messenger')}
           currentLocation={currentLocation}
           onLocationChange={setCurrentLocation}
           businessName={settings.businessName}

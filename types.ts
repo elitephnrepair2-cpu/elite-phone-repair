@@ -908,7 +908,7 @@ export interface SmsLog {
   to_phone?: string | null;
 }
 
-export type View = 'dashboard' | 'add_customer' | 'edit_customer' | 'new_ticket' | 'view_ticket' | 'edit_ticket' | 'kiosk' | 'kiosk_login' | 'kiosk_ticket_view' | 'quotes_dashboard' | 'new_quote' | 'edit_quote' | 'appointments_dashboard' | 'settings' | 'parts_dashboard' | 'quote_widget' | 'campaigns' | 'messages' | 'analytics';
+export type View = 'dashboard' | 'add_customer' | 'edit_customer' | 'new_ticket' | 'view_ticket' | 'edit_ticket' | 'kiosk' | 'kiosk_login' | 'kiosk_ticket_view' | 'quotes_dashboard' | 'new_quote' | 'edit_quote' | 'appointments_dashboard' | 'settings' | 'parts_dashboard' | 'quote_widget' | 'campaigns' | 'messages' | 'messenger' | 'analytics';
 
 export type ImportedRow = {
   name: string;
@@ -1039,3 +1039,42 @@ export interface CustomerTag {
   tag: string;
   created_at: string;
 }
+
+export interface FacebookAttachment {
+  type: string;
+  url?: string | null;
+  title?: string | null;
+}
+
+export interface FacebookConversation {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  page_id: string;
+  psid: string;
+  customer_id?: string | null;
+  customer_name?: string | null;
+  customer_profile_pic?: string | null;
+  last_message_text?: string | null;
+  last_message_at: string;
+  last_customer_activity_at: string;
+  unread_count: number;
+  customer?: Customer | null;
+}
+
+export interface FacebookMessage {
+  id: string;
+  created_at: string;
+  conversation_id: string;
+  page_id: string;
+  psid: string;
+  direction: 'inbound' | 'outbound';
+  meta_message_id?: string | null;
+  content?: string | null;
+  attachments?: FacebookAttachment[];
+  status: 'sent' | 'pending' | 'failed';
+  error_message?: string | null;
+  is_echo: boolean;
+  timestamp_ms?: number | null;
+}
+
