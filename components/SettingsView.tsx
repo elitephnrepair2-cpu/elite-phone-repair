@@ -70,47 +70,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
   const [activeTemplateTab, setActiveTemplateTab] = useState<'immediate' | 'reminder_24h' | 'reminder_2h' | 'missed' | 'confirm_reply' | 'cancel_reply'>('immediate');
   const [isSavingSmsSettings, setIsSavingSmsSettings] = useState(false);
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSaveSettings(form);
-    alert('Settings saved successfully!');
-  };
-
-  const handleSaveSmsSettings = async () => {
-    setIsSavingSmsSettings(true);
-    try {
-      const { error } = await supabase
-        .from('appointment_sms_settings')
-        .upsert([{
-          ...smsConfig,
-          location: cloverLocation || 'Beaumont',
-          updated_at: new Date().toISOString()
-        }], { onConflict: 'location' });
-
-      if (error) {
-        console.error("Failed to save SMS settings:", error);
-        alert("Failed to save appointment SMS settings.");
-      } else {
-        alert("Appointment SMS Settings saved successfully!");
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsSavingSmsSettings(false);
-    }
-  };
-
-  const getActiveTemplateKey = () => {
-    switch (activeTemplateTab) {
-      case 'immediate': return 'template_immediate_confirmation';
-      case 'reminder_24h': return 'template_reminder_24h';
-      case 'reminder_2h': return 'template_reminder_2h';
-      case 'missed': return 'template_missed_appointment';
-      case 'confirm_reply': return 'template_confirmation_reply';
-      case 'cancel_reply': return 'template_cancellation_reply';
-    }
-  };
-
   const fetchSmsSettings = async () => {
     try {
       const loc = currentLocation || 'Beaumont';

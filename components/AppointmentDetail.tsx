@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Appointment, AppointmentSmsJob } from '../types';
+import { supabase } from '../supabaseClient';
 import { fetchAppointmentSmsJobs, triggerAppointmentSmsProcessor } from '../services/appointmentSmsService';
 
 interface AppointmentDetailProps {
