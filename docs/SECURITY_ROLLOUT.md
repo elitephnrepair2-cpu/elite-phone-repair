@@ -1,9 +1,8 @@
 # Staff access and public check-in rollout
 
-This branch is a review candidate. Nothing here applies a migration, creates a
-staff account, changes a live setting, or deploys a function automatically.
-The currently deployed site stays public until the rollout below is approved
-and completed. Deploying only the login page does **not** secure the Data API.
+Vite builds do not apply these migrations, create staff memberships or deploy
+Edge Functions. Coordinate the SQL, functions and frontend as described below.
+Deploying only the login page does **not** secure the Data API.
 
 ## Result
 
@@ -19,8 +18,9 @@ and completed. Deploying only the login page does **not** secure the Data API.
   Supabase session, not a device whitelist or a permanent authentication bypass.
   Token expiry, membership revocation and sign-out still apply. Some browsers
   restore tab storage when restoring a closed session; use Lock on shared desks.
-- Visitors can read repair prices and submit a check-in. They cannot list,
-  retrieve, edit or delete CRM records. The endpoint returns only `{ok: true}`.
+- Visitors can read repair prices, submit a check-in and submit a new website
+  quote. They cannot list, retrieve, edit or delete CRM records. The check-in
+  endpoint returns only `{ok: true}`.
 - Check-in validates a Turnstile challenge on the server and checks hostname and
   action. A service-only transaction matches an existing phone/location or
   creates a customer, then inserts a ticket. Existing identity and consent are
@@ -50,10 +50,17 @@ execution of legacy public SECURITY DEFINER functions, then grants the private
 membership helpers explicitly; verify no unrelated integration relies on those
 legacy RPCs. PostgreSQL trigger entry points are not direct browser RPCs.
 
-Inventory external website quote/booking forms too. Any form writing directly
-to the CRM Data API will be denied by these policies and needs a controlled
-submission endpoint before cutover. The repository's public quote widget only
-reads prices; the new submission endpoint covers kiosk check-in specifically.
+The Shopify form at https://elitephonerepairtx.net/ writes directly to `quotes`.
+Apply `20261022050445_public_quote_intake.sql` in the same transaction as the
+staff restrictions. It grants anonymous INSERT on only the form's ten columns,
+validates length/phone/location/status, and grants no SELECT, UPDATE or DELETE.
+Server-managed IDs, timestamps and prices cannot be supplied. A private trigger
+serializes limits of three requests per phone and 120 total per ten minutes.
+This preserves the current form without a Shopify theme change. It does not
+add a bot challenge: moving quotes to a challenged server endpoint remains a
+follow-up. The site's optional photo upload currently targets a nonexistent
+`quote-photos` bucket; do not create a public upload bucket as a security shortcut.
+Other external booking forms still require a separate inventory.
 
 Historical root SQL scripts use open policies. Do not rerun them after these
 migrations. Future migrations must preserve the restricted grants and policies.
@@ -63,7 +70,11 @@ migrations. Future migrations must preserve the restricted grants and policies.
 1. Use a staging Supabase project first. Disable public self-signup if it is not
    needed by another application. Do not automatically promote existing Auth users.
 2. Apply `supabase/migrations/202610220001_staff_access.sql` and
-   `202610220002_public_check_in.sql` to staging, in that order.
+   `202610220002_public_check_in.sql`, then the public quote migration above.
+   For a coordinated live cutover, combine all three in a single transaction.
+   `20261022050810_staff_access_bootstrap.sql` is an optional idempotent subset
+   that prepares memberships before tightening existing CRM tables. It contains
+   no account IDs or automatic role assignments.
 3. Create staff email/password accounts through Supabase Auth's administrator
    interface. Set initial passwords securely; never put passwords in Git or chat.
 4. Use the SQL Editor/service administration to add each approved Auth user UUID
@@ -105,6 +116,14 @@ Twilio/Clover/Meta secrets. Workers and quote database webhooks must send either
 `x-crm-worker-secret: <CRM_WORKER_SECRET>`. The public anon key alone is denied.
 The automation worker now uses its server credential when calling send-sms.
 Never give worker/service credentials to browsers.
+
+For the existing quote trigger and scheduled-campaign job, provision Vault names
+`crm_project_url` (public URL), `crm_anon_key` (public gateway JWT) and
+`crm_worker_secret` (matches Edge `CRM_WORKER_SECRET`). Apply
+`20261022051331_authenticated_worker_calls.sql` before enabling guarded workers.
+Its private header helper is unavailable to browser roles. The migration keeps
+the existing cron schedule, supplies a correctly spaced Bearer header plus the
+private worker credential, and fixes/restricts the quote trigger's search path.
 
 Deploy the shared helpers and **all changed functions** together using the root
 `supabase/config.toml`. Inbound webhooks and public-check-in have gateway JWT
@@ -162,6 +181,28 @@ The earlier audit's SMS worker claiming/queue consolidation, consent-rule
 unification across send paths, delivery status callbacks, paginated data loading,
 legacy feature cleanup and existing dependency advisories remain separate work.
 This change does not claim to fix those issues or existing data exposure history.
+
+## Approved live preparation, 2026-10-22
+
+The owner approved a live rollout after the account's free-project limit and
+Free-plan branching restrictions blocked a hosted staging database. A local
+encrypted backup of all 21 public CRM tables, schema/access metadata, triggers
+and cron definitions was captured before permanent access changes. Its encryption
+round trip and row counts were verified; it excludes Auth and Storage data.
+Eight existing function bundles were backed up separately with authenticated
+encryption. Recovery keys and backups are outside this repository.
+
+A real-schema transaction rehearsal passed for staff permissions, the exact
+Shopify quote INSERT and the approved administrator identity, then rolled back.
+The website notification trigger was disabled only inside that rehearsal so no
+test notifications were sent. Customer/ticket/quote counts remained 3286/4134/79
+and no rehearsal quote remained. The owner subsequently confirmed the real
+account can enter the preview CRM and remain signed in after refresh.
+
+The bootstrap membership and authenticated-worker migrations were applied and
+verified. Browser roles cannot execute the worker-header helper or quote-trigger
+RPC. The final access-policy/function/frontend cutover still requires completion
+and direct HTTP verification; these preparation checks alone are not a release.
 
 ## Live read-only preflight
 
