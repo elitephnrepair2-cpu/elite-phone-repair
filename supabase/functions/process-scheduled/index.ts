@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { authorize } from '../_shared/authorization.ts';
+import { serve, createClient } from "../_shared/runtime.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +11,9 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
+
+  const denied = await authorize(req, { worker: true, headers: corsHeaders });
+  if (denied) return denied;
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
@@ -278,9 +281,10 @@ serve(async (req) => {
     )
 
   } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Operation failed';
     console.error("SCHEDULER EDGE FUNCTION ERROR:", err)
     return new Response(
-      JSON.stringify({ ok: false, error: err.message }),
+      JSON.stringify({ ok: false, error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }

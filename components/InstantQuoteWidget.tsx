@@ -73,10 +73,12 @@ const InstantQuoteWidget: React.FC<InstantQuoteWidgetProps> = ({ isInternal = fa
     // Override with DB values if loaded
     if (dbPrices && dbPrices.length > 0) {
       dbPrices.forEach(item => {
+        const category = item.category ?? item.issue;
+        if (!item.brand || !item.model || !category || item.price == null) return;
         if (!map[item.brand]) map[item.brand] = {};
         if (!map[item.brand][item.model]) map[item.brand][item.model] = {};
-        map[item.brand][item.model][item.category] = {
-          price: item.price,
+        map[item.brand][item.model][category] = {
+          price: typeof item.price === 'number' ? `$${item.price}` : String(item.price),
           lcd: item.lcd_price || undefined,
           oled: item.oled_price || undefined,
           oem: item.oem_price || undefined

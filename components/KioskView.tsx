@@ -22,9 +22,11 @@ interface KioskViewProps {
   }) => Promise<boolean>;
   onExitKiosk: () => void;
   kioskPassword?: string;
+  verification?: React.ReactNode;
+  canSubmit?: boolean;
 }
 
-const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPassword }) => {
+const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPassword, verification, canSubmit = true }) => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [callBackNumber, setCallBackNumber] = useState('');
@@ -39,7 +41,7 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
   const [problemDescription, setProblemDescription] = useState('');
   const [heardFrom, setHeardFrom] = useState('');
   const [transactionalConsent, setTransactionalConsent] = useState(true);
-  const [promotionalConsent, setPromotionalConsent] = useState(true);
+  const [promotionalConsent, setPromotionalConsent] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -83,16 +85,6 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
 
     setIsSubmitting(true);
     try {
-      let ip = 'unknown';
-      try {
-        const response = await fetch('https://api.ipify.org?format=json');
-        const data = await response.json();
-        ip = data.ip;
-      } catch (err) {
-        console.warn("Could not capture IP address:", err);
-      }
-
-
       const success = await onCheckIn({
         name,
         phone: formatPhoneInput(phone),
@@ -106,7 +98,6 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
         heardFrom,
         transactionalConsent,
         promotionalConsent,
-        consent_ip: ip,
         consent_form_version: 'v1.1'
       });
       setIsSubmitting(false);
@@ -124,7 +115,7 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
         setProblemDescription('');
         setHeardFrom('');
         setTransactionalConsent(true);
-        setPromotionalConsent(true);
+        setPromotionalConsent(false);
 
         // Show success message and hide it after a few seconds
         setShowSuccess(true);
@@ -142,6 +133,7 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
   };
 
   const handleAdminExitClick = () => {
+    if (!kioskPassword) { onExitKiosk(); return; }
     setShowPasswordModal(true);
   };
 
@@ -162,7 +154,6 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
     setPasswordInput('');
     setPasswordError(false);
   };
-  console.log("KIOSK SUBMIT FIRED");
   return (
     <>
       <div className="bg-white p-8 md:p-12 rounded-2xl shadow-2xl max-w-3xl mx-auto relative overflow-hidden">
@@ -371,9 +362,10 @@ const KioskView: React.FC<KioskViewProps> = ({ onCheckIn, onExitKiosk, kioskPass
           </div>
 
           <div className="pt-4">
-            <button
+            {verification}
+          <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !canSubmit}
               className="w-full bg-red-600 text-white font-bold py-4 px-6 rounded-lg hover:bg-red-700 transition-colors shadow-lg text-xl disabled:bg-red-400 disabled:cursor-not-allowed"
             >
               {isSubmitting ? 'Submitting...' : 'Submit Ticket'}

@@ -10,11 +10,15 @@ View your app in AI Studio: https://ai.studio/apps/c66fd5e9-5e1d-4b4b-8bf3-5dc1b
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+**Prerequisites:** Node.js 24 (see `.nvmrc`)
 
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Review [staff access and public check-in setup](docs/SECURITY_ROLLOUT.md).
+   Server secrets belong in Supabase, never the browser build. A manager must
+   provision an Auth account and active staff membership before workstation use.
 3. Run the app:
    `npm run dev`
+
+Run `npm test`, `npm run lint`, and `npm run build` before proposing changes.

@@ -68,7 +68,7 @@ serve(async (req: Request) => {
           return new Response('Unauthorized: Invalid HMAC Signature', { status: 401 })
         }
       } else {
-        console.warn('META_APP_SECRET is not set in environment variables. Signature verification skipped.')
+        return new Response('Service unavailable', { status: 503 })
       }
 
       const body = JSON.parse(rawBody)

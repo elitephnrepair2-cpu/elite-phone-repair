@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { authorize } from '../_shared/authorization.ts';
+import { serve, createClient } from "../_shared/runtime.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +11,9 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
+
+  const denied = await authorize(req, { worker: true, headers: corsHeaders });
+  if (denied) return denied;
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
@@ -167,9 +170,10 @@ serve(async (req) => {
     }
 
   } catch (error) {
-    console.error("Error in send-sms function:", error.message)
+    const errorMessage = error instanceof Error ? error.message : 'Operation failed';
+    console.error("Error in send-sms function:", errorMessage)
     return new Response(
-      JSON.stringify({ ok: false, error: error.message }),
+      JSON.stringify({ ok: false, error: errorMessage }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
