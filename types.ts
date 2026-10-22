@@ -10,6 +10,12 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      staff_members: {
+        Row: { user_id: string; name: string; role: 'admin' | 'staff'; active: boolean; created_at: string }
+        Insert: { user_id: string; name: string; role?: 'admin' | 'staff'; active?: boolean; created_at?: string }
+        Update: { name?: string; role?: 'admin' | 'staff'; active?: boolean }
+        Relationships: []
+      }
       customers: {
         Row: {
           alt_phone: string | null

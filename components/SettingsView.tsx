@@ -187,7 +187,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
     try {
       const { data } = await supabase
         .from('integration_settings')
-        .select('*')
+        .select('id, provider, is_connected, merchant_id, selected_device_id')
         .eq('provider', `clover_${cloverLocation.toLowerCase()}`)
         .maybeSingle();
       
@@ -751,7 +751,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
                     if (confirm(`Are you sure you want to disconnect Clover for ${cloverLocation}? You will need to re-authorize.`)) {
                       setIsCloverConnected(false);
                       setCloverDevices([]);
-                      await supabase.from('integration_settings').update({ is_connected: false, access_token: null, selected_device_id: null }).eq('provider', `clover_${cloverLocation.toLowerCase()}`);
+                      const { data, error } = await supabase.functions.invoke('clover-api', { body: { action: 'disconnect', location: cloverLocation.toLowerCase() } });
+                      if (error || !data?.ok) { alert('Unable to disconnect Clover. Please try again.'); return; }
                     }
                   }}
                   className="mt-4 text-xs text-red-500 font-bold hover:underline"

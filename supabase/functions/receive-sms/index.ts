@@ -1,16 +1,30 @@
+import twilio from 'npm:twilio@6.2.0';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 serve(async (req) => {
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   try {
+    // Use the configured external URL, never attacker-controlled forwarding headers.
+    const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
+    const webhookUrl = Deno.env.get('TWILIO_SMS_WEBHOOK_URL');
+    if (!authToken || !webhookUrl) return new Response('Service unavailable', { status: 503 });
     // Parse form data from Twilio
     const formData = await req.formData()
+    const params: Record<string, string> = {};
+    for (const [key, value] of formData.entries()) {
+      if (typeof value !== 'string' || key in params) return new Response('Invalid request', { status: 400 });
+      params[key] = value;
+    }
+    if (!twilio.validateRequest(authToken, req.headers.get('X-Twilio-Signature') || '', webhookUrl, params)) {
+      return new Response('Unauthorized', { status: 401 });
+    }
     const from = formData.get('From')?.toString() || ''
     const to = formData.get('To')?.toString() || ''
     const body = formData.get('Body')?.toString() || ''
     const messageSid = formData.get('MessageSid')?.toString() || ''
 
-    console.log(`Received SMS from ${from}: ${body}`)
+    console.log('Verified inbound SMS webhook')
 
     // Clean phone number to 10 digits
     const digitsOnly = from.replace(/\D/g, '')

@@ -1,4 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { authorize } from '../_shared/authorization.ts';
+import { serve } from "../_shared/runtime.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,9 +12,12 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  const denied = await authorize(req, { workerOnly: true, headers: corsHeaders });
+  if (denied) return denied;
+
   try {
     const payload = await req.json()
-    console.log("Received payload:", JSON.stringify(payload))
+
 
     // Webhooks send table event info inside payload.record (for INSERT/UPDATE)
     const record = payload.record
@@ -115,9 +119,10 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error("Error in notify-new-quote function:", error.message)
+    const errorMessage = error instanceof Error ? error.message : 'Operation failed';
+    console.error("Error in notify-new-quote function:", errorMessage)
     return new Response(
-      JSON.stringify({ ok: false, error: error.message }),
+      JSON.stringify({ ok: false, error: errorMessage }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }

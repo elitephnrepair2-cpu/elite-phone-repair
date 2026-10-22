@@ -1,3 +1,4 @@
+import { authorize } from '../_shared/authorization.ts';
 /**
  * process-automations — Supabase Edge Function
  *
@@ -14,8 +15,7 @@
  * - All sends go through the existing 'send-sms' edge function
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { serve, createClient } from "../_shared/runtime.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,12 +30,15 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  const denied = await authorize(req, { worker: true, headers: corsHeaders });
+  if (denied) return denied;
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     const supabaseClient = createClient(supabaseUrl, supabaseServiceKey)
     const supabaseFunctionUrl = supabaseUrl + '/functions/v1/send-sms'
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    const workerKey = supabaseServiceKey
 
     const nowIso = new Date().toISOString()
 
@@ -96,7 +99,7 @@ serve(async (req) => {
     // ── 3. Process each enrollment ─────────────────────────────────────────
     for (const enrollment of validEnrollments) {
       const contact = enrollment.contact
-      const result = await processEnrollment(enrollment, contact, supabaseClient, supabaseFunctionUrl, anonKey)
+      const result = await processEnrollment(enrollment, contact, supabaseClient, supabaseFunctionUrl, workerKey)
       results.push(result)
     }
 
@@ -121,7 +124,7 @@ async function processEnrollment(
   contact: any,
   db: any,
   sendSmsUrl: string,
-  anonKey: string
+  workerKey: string
 ): Promise<any> {
   const enrollmentId = enrollment.id
   const automationId = enrollment.automation_id
@@ -201,7 +204,7 @@ async function processEnrollment(
             const message = interpolateMessage(cfg.message || '', contact)
 
             // Call the existing send-sms edge function
-            const sendResult = await callSendSms(sendSmsUrl, anonKey, {
+            const sendResult = await callSendSms(sendSmsUrl, workerKey, {
               customer_id: contact.id,
               message_type: 'marketing',
               content: message,
@@ -456,7 +459,7 @@ function interpolateMessage(template: string, contact: any): string {
 
 async function callSendSms(
   supabaseFunctionUrl: string,
-  anonKey: string,
+  workerKey: string,
   payload: {
     customer_id: string
     message_type: string
@@ -470,8 +473,8 @@ async function callSendSms(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${anonKey}`,
-        'apikey': anonKey,
+        'Authorization': `Bearer ${workerKey}`,
+        'apikey': workerKey,
       },
       body: JSON.stringify(payload),
     })

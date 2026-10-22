@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { authorize } from '../_shared/authorization.ts';
+import { serve, createClient } from "../_shared/runtime.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,6 +15,9 @@ serve(async (req: Request) => {
   if (req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405, headers: corsHeaders })
   }
+
+  const denied = await authorize(req, { headers: corsHeaders });
+  if (denied) return denied;
 
   try {
     const { conversation_id, message_text, client_msg_id } = await req.json()

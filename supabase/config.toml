@@ -1,0 +1,29 @@
+project_id = "elite-phone-repair"
+
+# Browser requests use Supabase JWT verification AND the handler's staff check.
+[functions.send-sms]
+verify_jwt = true
+[functions.send-facebook-messenger]
+verify_jwt = true
+[functions.update-sms-consent]
+verify_jwt = true
+[functions.clover-api]
+verify_jwt = true
+[functions.merge-duplicates]
+verify_jwt = true
+[functions.process-scheduled]
+verify_jwt = true
+[functions.process-automations]
+verify_jwt = true
+[functions.process-appointment-sms]
+verify_jwt = true
+[functions.notify-new-quote]
+verify_jwt = true
+
+# These handlers authenticate provider signatures or a server-validated challenge.
+[functions.receive-sms]
+verify_jwt = false
+[functions.receive-facebook-messenger]
+verify_jwt = false
+[functions.public-check-in]
+verify_jwt = false

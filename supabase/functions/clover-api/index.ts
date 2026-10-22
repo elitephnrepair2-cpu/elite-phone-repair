@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { authorize } from '../_shared/authorization.ts';
+import { serve, createClient } from "../_shared/runtime.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,6 +13,9 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
+
+  const denied = await authorize(req, { admin: true, headers: corsHeaders });
+  if (denied) return denied;
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
@@ -77,6 +80,14 @@ serve(async (req) => {
         JSON.stringify({ ok: true, message: "Successfully connected to Clover via Manual Token!" }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
+    }
+
+    if (action === 'disconnect') {
+      const { error } = await supabaseClient.from('integration_settings')
+        .update({ is_connected: false, access_token: null, selected_device_id: null })
+        .eq('provider', providerKey);
+      if (error) throw error;
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // ACTION: GET DEVICES
