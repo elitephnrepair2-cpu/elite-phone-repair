@@ -1,3 +1,5 @@
+import { dispatchSms } from '../_shared/smsDispatch.ts';
+import { canSendSms, appointmentSmsExpired } from '../_shared/smsPolicy.ts';
 import { authorize } from '../_shared/authorization.ts';
 import { serve, createClient } from "../_shared/runtime.ts"
 
@@ -23,15 +25,7 @@ serve(async (req) => {
     }
 
     const supabaseClient = createClient(supabaseUrl, supabaseServiceKey)
-    const nowIso = new Date().toISOString()
-
-    // 1. Atomically claim due pending jobs
-    const { data: dueJobs, error: fetchErr } = await supabaseClient
-      .from('appointment_sms_jobs')
-      .select('*')
-      .eq('status', 'pending')
-      .lte('scheduled_for', nowIso)
-      .limit(50)
+    const { data: dueJobs, error: fetchErr } = await supabaseClient.rpc('crm_claim_appointment_sms', { p_limit:10 })
 
     if (fetchErr) {
       throw new Error("Failed to fetch due appointment jobs: " + fetchErr.message)
@@ -47,12 +41,6 @@ serve(async (req) => {
     const processedResults = []
 
     for (const job of dueJobs) {
-      // Lock job atomically
-      await supabaseClient
-        .from('appointment_sms_jobs')
-        .update({ status: 'claimed', claimed_at: nowIso })
-        .eq('id', job.id)
-
       // Fetch related appointment
       const { data: appt } = await supabaseClient
         .from('appointments')
@@ -112,6 +100,12 @@ serve(async (req) => {
         .eq('location', locationName)
         .maybeSingle()
 
+      if (appointmentSmsExpired(appt.date,job.job_type,job.scheduled_for,settings?.timezone || 'America/Chicago')) {
+        await supabaseClient.from('appointment_sms_jobs').update({ status:'skipped',skip_reason:'Appointment reminder expired' }).eq('id',job.id)
+        processedResults.push({ id:job.id,type:job.job_type,outcome:'skipped' })
+        continue
+      }
+
       const { data: shopConfig } = await supabaseClient
         .from('shop_settings')
         .select('address')
@@ -134,33 +128,15 @@ serve(async (req) => {
         if (customer?.phone) phoneToUse = customer.phone
       }
 
-      if (customer && customer.transactional_sms_consent === false) {
-        await supabaseClient
-          .from('appointment_sms_jobs')
-          .update({ status: 'skipped', skip_reason: 'Customer explicitly opted out (transactional_sms_consent = false)' })
-          .eq('id', job.id)
-        continue
-      }
-
-      // Clean & Validate Phone Number
-      const digitsOnly = (phoneToUse || '').replace(/\D/g, '')
-      if (digitsOnly.length < 10) {
-        await supabaseClient
-          .from('appointment_sms_jobs')
-          .update({ status: 'failed', error_message: 'Invalid or missing 10-digit phone number' })
-          .eq('id', job.id)
-        continue
-      }
-
-      let normalizedPhone = digitsOnly.length === 10 ? `+1${digitsOnly}` : `+${digitsOnly}`
-
       // Check 2-Hour Anti-Bunching Rule
-      if (['reminder_24h', 'reminder_2h'].includes(job.job_type)) {
+      if (job.customer_id && ['reminder_24h', 'reminder_2h'].includes(job.job_type)) {
         const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
         const { data: recentMsgs } = await supabaseClient
           .from('sms_messages')
           .select('id')
-          .eq('customer_id', job.customer_id || appt.customer_id)
+          .eq('customer_id', job.customer_id)
+          .eq('direction', 'outbound')
+          .eq('status', 'sent')
           .gte('created_at', twoHoursAgo)
           .limit(1)
 
@@ -200,6 +176,10 @@ serve(async (req) => {
       // DRY-RUN MODE CHECK (Default is DRY-RUN = TRUE for safety)
       const isDryRun = settings?.dry_run !== false
 
+      if (isDryRun && !canSendSms(customer, 'transactional')) {
+        await supabaseClient.from('appointment_sms_jobs').update({ status:'skipped', skip_reason:'Transactional consent not granted.' }).eq('id',job.id)
+        continue
+      }
       if (isDryRun) {
         await supabaseClient
           .from('appointment_sms_jobs')
@@ -224,80 +204,20 @@ serve(async (req) => {
         continue
       }
 
-      // LIVE TWILIO DISPATCH
-      const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID')
-      const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')
-      const fromNumber = Deno.env.get('TWILIO_FROM_NUMBER')
-
-      if (!accountSid || !authToken || !fromNumber) {
-        await supabaseClient
-          .from('appointment_sms_jobs')
-          .update({ status: 'failed', error_message: 'Twilio environment credentials missing' })
-          .eq('id', job.id)
-        continue
-      }
-
-      const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`
-      const formData = new URLSearchParams()
-      formData.append('To', normalizedPhone)
-      formData.append('From', fromNumber)
-      formData.append('Body', messageContent)
-
-      try {
-        const twilioRes = await fetch(twilioUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body: formData.toString()
-        })
-
-        const twilioData = await twilioRes.json()
-
-        if (twilioRes.ok) {
-          await supabaseClient
-            .from('appointment_sms_jobs')
-            .update({
-              status: 'sent',
-              sent_at: new Date().toISOString(),
-              provider_message_id: twilioData.sid
-            })
-            .eq('id', job.id)
-
-          await supabaseClient.from('sms_messages').insert({
-            customer_id: job.customer_id,
-            message_type: 'transactional',
-            content: messageContent,
-            status: 'sent',
-            provider_message_id: twilioData.sid
-          })
-
-          processedResults.push({ id: job.id, type: job.job_type, outcome: 'sent' })
-        } else {
-          const twilioErr = twilioData.message || 'Twilio send error'
-          await supabaseClient
-            .from('appointment_sms_jobs')
-            .update({
-              status: 'failed',
-              error_message: twilioErr
-            })
-            .eq('id', job.id)
-
-          processedResults.push({ id: job.id, type: job.job_type, outcome: 'failed', error: twilioErr })
-        }
-      } catch (reqErr: any) {
-        // Ambiguous timeout - flag as uncertain
-        await supabaseClient
-          .from('appointment_sms_jobs')
-          .update({
-            status: 'uncertain',
-            error_message: `Network timeout / ambiguous send: ${reqErr?.message || String(reqErr)}`
-          })
-          .eq('id', job.id)
-
-        processedResults.push({ id: job.id, type: job.job_type, outcome: 'uncertain' })
-      }
+      // Use the same durable consent/dispatch gate as manual and campaign texts.
+      const result = await dispatchSms(supabaseClient, {
+        customer_id:job.customer_id, to_phone:phoneToUse, message_type:'transactional',
+        content:messageContent, idempotency_key:`appointment:${job.appointment_id}:${job.appointment_version}:${job.job_type}`,
+      })
+      const { error: outcomeError } = await supabaseClient.from('appointment_sms_jobs').update({
+        status:result.status === 'conflict' ? 'uncertain' : result.status,
+        sent_at:result.ok ? new Date().toISOString() : null,
+        provider_message_id:result.message_id || null,
+        skip_reason:result.status === 'skipped' ? result.reason : null,
+        error_message:result.ok ? null : result.reason,
+      }).eq('id',job.id)
+      if (outcomeError) throw new Error('Could not record appointment send outcome; review claimed job before retrying')
+      processedResults.push({ id:job.id, type:job.job_type, outcome:result.status })
     }
 
     return new Response(

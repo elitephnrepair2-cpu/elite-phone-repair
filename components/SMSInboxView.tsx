@@ -1,3 +1,4 @@
+import { sendSmsViaEdgeFunction } from '../services/smsService';
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Customer, RepairTicket, SmsLog } from '../types';
 import { supabase } from '../supabaseClient';
@@ -286,17 +287,12 @@ export const SMSInboxView: React.FC<SMSInboxViewProps> = ({
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke('send-sms', {
-        body: {
-          customer_id: targetCustomerId,
-          to_phone: normalizedPhone,
-          message_type: 'transactional',
-          content: replyText.trim()
-        }
+      const result = await sendSmsViaEdgeFunction({
+        customer_id:targetCustomerId, to_phone:normalizedPhone,
+        message_type:'transactional', content:replyText.trim()
       });
-
-      if (error || (data && !data.ok)) {
-        showAlert(`Failed to send SMS reply: ${error?.message || data?.reason || 'Unknown error'}`);
+      if (!result.success) {
+        showAlert(`Failed to send SMS reply: ${result.reason || result.error || 'Check message history before retrying.'}`);
       } else {
         setReplyText('');
         fetchMessages(false);
@@ -327,9 +323,8 @@ export const SMSInboxView: React.FC<SMSInboxViewProps> = ({
           name: newCustName.trim(),
           phone: formattedPhone,
           location: newCustLocation,
-          transactional_sms_consent: true,
-          marketing_sms_consent: true,
-          sms_consent_date: new Date().toISOString()
+          transactional_sms_consent: false,
+          marketing_sms_consent: false
         })
         .select()
         .single();
@@ -343,7 +338,7 @@ export const SMSInboxView: React.FC<SMSInboxViewProps> = ({
         if (matched) {
           const res = await (supabase as any)
             .from('customers')
-            .update({ name: newCustName.trim(), transactional_sms_consent: true, marketing_sms_consent: true })
+            .update({ name: newCustName.trim() })
             .eq('id', matched.id)
             .select()
             .single();

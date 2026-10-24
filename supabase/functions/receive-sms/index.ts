@@ -1,6 +1,6 @@
+import { inboundOptOut } from '../_shared/smsPolicy.ts';
 import twilio from 'npm:twilio@6.2.0';
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { serve, createClient } from "../_shared/runtime.ts"
 
 serve(async (req) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
@@ -46,99 +46,21 @@ serve(async (req) => {
       : normalizedPhone
     const plusOnePhone = `+1${normalizedPhone}`
 
-    // Lookup customer by phone number using all formatting variants
-    const { data: customer } = await supabaseClient
-      .from('customers')
-      .select('id, name')
-      .or(`phone.eq.${normalizedPhone},phone.eq.${formattedPhone},phone.eq.${dashedPhone},phone.eq.${plusOnePhone},alt_phone.eq.${normalizedPhone},alt_phone.eq.${formattedPhone}`)
-      .limit(1)
-      .maybeSingle()
-
-    // 1. Log inbound message into sms_messages table
-    const { error: logError } = await supabaseClient
-      .from('sms_messages')
-      .insert({
-        customer_id: customer?.id || null,
-        from_phone: normalizedPhone || from,
-        message_type: 'transactional',
-        direction: 'inbound',
-        content: body,
-        status: 'sent',
-        provider_message_id: messageSid,
-        created_at: new Date().toISOString()
-      })
-
-    if (logError) {
-      console.error('Failed to log inbound SMS to sms_messages:', logError)
+    // Record the callback and any phone-level opt-out in one transaction, once per
+    // provider ID. STOP persists even when there is no customer record yet.
+    const optOut = inboundOptOut(body, params.OptOutType);
+    const { data: inbound, error: inboundError } = await supabaseClient.rpc('crm_record_inbound_sms', {
+      p_provider_id:messageSid, p_from:from, p_to:to, p_content:body, p_opt_out:optOut,
+    });
+    if (inboundError || !inbound) throw new Error('Could not persist inbound message');
+    const emptyTwiml = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
+    if (inbound.duplicate || optOut) {
+      // Twilio handles STOP/START/HELP responses. Returning another Message would
+      // duplicate its opt-out confirmation. START never grants marketing consent.
+      return new Response(emptyTwiml, { headers:{ 'Content-Type':'text/xml' } });
     }
-
-    let twimlResponseText = ''
-
-    // 2. Check for opt-out keyword (STOP) or opt-in keyword (START / UNSTOP)
-    const cleanBodyStr = body.trim().toLowerCase()
-    const isOptOut = cleanBodyStr === 'stop'
-    const isOptIn = ['start', 'unstop'].includes(cleanBodyStr)
-
-    if (isOptOut) {
-      console.log(`Opt-out keyword detected from ${from}. Updating consent status for all matching customer records.`)
-
-      await supabaseClient
-        .from('customers')
-        .update({
-          marketing_sms_consent: false,
-          transactional_sms_consent: false,
-          revoked_at: new Date().toISOString(),
-          revoked_reason: 'Customer replied STOP',
-          consent_source: 'twilio_webhook'
-        })
-        .or(`phone.eq."${normalizedPhone}",phone.eq."${formattedPhone}",phone.eq."${dashedPhone}",phone.eq."${plusOnePhone}"`)
-
-      // Log consent event
-      if (customer) {
-        await supabaseClient
-          .from('sms_consent_events')
-          .insert({
-            customer_id: customer.id,
-            phone: normalizedPhone,
-            consent_type: 'opt-out-all',
-            status: false,
-            source: 'twilio_webhook',
-            message_sid: messageSid,
-            notes: { body }
-          })
-      }
-
-      twimlResponseText = "You have been unsubscribed from Elite Phone Repair SMS notifications. Reply START to resubscribe anytime."
-    } else if (isOptIn) {
-      console.log(`Opt-in keyword detected from ${from}. Restoring consent status.`)
-
-      await supabaseClient
-        .from('customers')
-        .update({
-          marketing_sms_consent: true,
-          transactional_sms_consent: true,
-          revoked_at: null,
-          revoked_reason: null,
-          consent_source: 'twilio_webhook_start'
-        })
-        .or(`phone.eq."${normalizedPhone}",phone.eq."${formattedPhone}",phone.eq."${dashedPhone}",phone.eq."${plusOnePhone}"`)
-
-      if (customer) {
-        await supabaseClient
-          .from('sms_consent_events')
-          .insert({
-            customer_id: customer.id,
-            phone: normalizedPhone,
-            consent_type: 'opt-in-all',
-            status: true,
-            source: 'twilio_webhook',
-            message_sid: messageSid,
-            notes: { body }
-          })
-      }
-
-      twimlResponseText = "You have successfully resubscribed to Elite Phone Repair SMS notifications. Welcome back!"
-    }
+    const customer = inbound.customer_id ? { id:inbound.customer_id } : null;
+    let twimlResponseText = '';
 
     // 3. APPOINTMENT CONFIRMATION / CANCELLATION REPLY HANDLING
     const cleanBody = body.trim().toLowerCase()
@@ -210,7 +132,7 @@ serve(async (req) => {
     }
 
     // 4. [AUTOMATION] — Reply nudge for condition nodes waiting on "has_replied"
-    if (customer && !isOptOut) {
+    if (customer) {
       try {
         const { data: activeEnrollments } = await supabaseClient
           .from('automation_enrollments')
@@ -249,9 +171,11 @@ serve(async (req) => {
       }
     }
 
+    // Appointment auto-replies must respect the same current phone-level consent.
+    if (!inbound.can_reply) twimlResponseText = '';
     // Return TwiML response to Twilio (with auto-reply text if applicable)
     const twiml = twimlResponseText 
-      ? `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${twimlResponseText}</Message></Response>`
+      ? `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${twimlResponseText.replace(/[<>&\"']/g, char => ({ '<':'&lt;', '>':'&gt;', '&':'&amp;', '\"':'&quot;', "'":'&apos;' })[char] || char)}</Message></Response>`
       : '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
 
     return new Response(twiml, {
@@ -259,12 +183,8 @@ serve(async (req) => {
       headers: { 'Content-Type': 'text/xml' }
     })
 
-  } catch (error) {
-    console.error('Error handling Twilio webhook:', error)
-    const twiml = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
-    return new Response(twiml, {
-      status: 200,
-      headers: { 'Content-Type': 'text/xml' }
-    })
+  } catch {
+    console.error('Could not process verified Twilio callback');
+    return new Response('Temporarily unavailable', { status:503 });
   }
 })

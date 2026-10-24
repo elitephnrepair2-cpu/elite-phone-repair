@@ -1,3 +1,4 @@
+import { dispatchSms } from '../_shared/smsDispatch.ts';
 import { authorize } from '../_shared/authorization.ts';
 import { serve, createClient } from "../_shared/runtime.ts"
 
@@ -18,26 +19,12 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID')
-    const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')
-    const fromNumber = Deno.env.get('TWILIO_FROM_NUMBER')
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error("Supabase configuration missing (URL or Service Role Key)")
-    }
-    if (!accountSid || !authToken || !fromNumber) {
-      throw new Error("Twilio configuration missing (SID, Token, or From Number)")
-    }
+    if (!supabaseUrl || !supabaseServiceKey) throw new Error('Supabase configuration missing');
 
     const supabaseClient = createClient(supabaseUrl, supabaseServiceKey)
 
-    // 1. Fetch pending or stuck scheduled campaigns that are due
-    const nowIso = new Date().toISOString()
-    const { data: pendingCampaigns, error: fetchErr } = await supabaseClient
-      .from('scheduled_campaigns')
-      .select('*')
-      .in('status', ['pending', 'sending'])
-      .lte('scheduled_for', nowIso)
+    // The database atomically changes pending -> sending and returns only our claim.
+    const { data: pendingCampaigns, error: fetchErr } = await supabaseClient.rpc('crm_claim_scheduled_campaigns')
 
     if (fetchErr) {
       throw new Error("Failed to fetch pending campaigns: " + fetchErr.message)
@@ -54,11 +41,6 @@ serve(async (req) => {
 
     // 2. Loop through and process each due campaign
     for (const campaign of pendingCampaigns) {
-      // Set status to 'sending' to lock it
-      await supabaseClient
-        .from('scheduled_campaigns')
-        .update({ status: 'sending' })
-        .eq('id', campaign.id)
       // Fetch target customers matching the location and consented to marketing (paginated to bypass 1000-row limit)
       let customers: any[] = []
       let p = 0
@@ -148,7 +130,6 @@ serve(async (req) => {
 
       let successCount = 0
       let failCount = 0
-      const smsLogBuffer: any[] = []
 
       // Helper function to send single SMS
       const sendSingleSms = async (customer: any) => {
@@ -179,62 +160,13 @@ serve(async (req) => {
           .replace(/\{name\}/g, customer.name ?? '')
           .replace(/\{device\}/g, latest?.device ?? '')
 
-        let normalizedPhone = customer.phone.replace(/[^\d+]/g, "")
-        if (normalizedPhone.length === 10 && !normalizedPhone.startsWith('+')) {
-          normalizedPhone = `+1${normalizedPhone}`
-        } else if (!normalizedPhone.startsWith('+')) {
-          normalizedPhone = `+${normalizedPhone}`
-        }
-
-        const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`
-        const formData = new URLSearchParams()
-        formData.append('To', normalizedPhone)
-        formData.append('From', fromNumber)
-        formData.append('Body', content)
-
-        try {
-          const res = await fetch(twilioUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
-              'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: formData.toString()
-          })
-
-          const data = await res.json()
-          if (res.ok) {
-            successCount++
-            smsLogBuffer.push({
-              customer_id: customer.id,
-              message_type: 'marketing',
-              content,
-              status: 'sent',
-              provider_message_id: data.sid,
-              campaign_id: campHist.id
-            })
-          } else {
-            failCount++
-            smsLogBuffer.push({
-              customer_id: customer.id,
-              message_type: 'marketing',
-              content,
-              status: 'failed',
-              error_message: data.message || "Unknown Twilio error",
-              campaign_id: campHist.id
-            })
-          }
-        } catch (smsErr) {
-          failCount++
-          smsLogBuffer.push({
-            customer_id: customer.id,
-            message_type: 'marketing',
-            content,
-            status: 'failed',
-            error_message: String(smsErr),
-            campaign_id: campHist.id
-          })
-        }
+        const result = await dispatchSms(supabaseClient, {
+          customer_id: customer.id, message_type: 'marketing', content,
+          campaign_id: campHist.id,
+          idempotency_key: `scheduled:${campaign.id}:${customer.phone.replace(/\D/g, '').slice(-10)}`,
+        })
+        if (result.ok) successCount++
+        else failCount++
       }
 
       // Process in concurrent batches of 15
@@ -243,12 +175,6 @@ serve(async (req) => {
         const batch = customers.slice(i, i + BATCH_SIZE)
         await Promise.all(batch.map(c => sendSingleSms(c)))
         await new Promise(r => setTimeout(r, 10))
-      }
-
-      // Batch insert SMS logs in chunks of 500
-      for (let i = 0; i < smsLogBuffer.length; i += 500) {
-        const chunk = smsLogBuffer.slice(i, i + 500)
-        await supabaseClient.from('sms_messages').insert(chunk)
       }
 
       // Update final stats
