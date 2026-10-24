@@ -1,6 +1,5 @@
 import { supabase } from '../supabaseClient';
 import type { Appointment, AppointmentSmsJob, AppointmentSmsSettings } from '../types';
-import { sendSmsViaEdgeFunction } from './smsService';
 
 /**
  * Parses appointment date and time string into a Javascript Date object in America/Chicago timezone context.
@@ -186,187 +185,14 @@ export async function scheduleAppointmentSmsSequence(
   }
 }
 
-/**
- * Processes pending appointment SMS jobs directly by evaluating pre-send rules
- * and dispatching via the deployed 'send-sms' Edge Function (or logging in Dry-Run mode).
- */
+/** Ask the authenticated server worker to claim and process due appointment jobs. */
 export async function triggerAppointmentSmsProcessor(): Promise<{ success: boolean; processed: number; errors: any[] }> {
   try {
-    const nowIso = new Date().toISOString();
-
-    // 1. Fetch pending due jobs
-    const { data: dueJobs, error: fetchErr } = await supabase
-      .from('appointment_sms_jobs')
-      .select('*')
-      .eq('status', 'pending')
-      .lte('scheduled_for', nowIso);
-
-    if (fetchErr || !dueJobs || dueJobs.length === 0) {
-      return { success: true, processed: 0, errors: [] };
-    }
-
-    let processedCount = 0;
-    const errorsList: any[] = [];
-
-    for (const job of dueJobs) {
-      // Lock job atomically
-      await supabase
-        .from('appointment_sms_jobs')
-        .update({ status: 'claimed', claimed_at: nowIso })
-        .eq('id', job.id);
-
-      // Fetch related appointment
-      const { data: appt } = await supabase
-        .from('appointments')
-        .select('*')
-        .eq('id', job.appointment_id)
-        .maybeSingle();
-
-      if (!appt) {
-        await supabase
-          .from('appointment_sms_jobs')
-          .update({ status: 'skipped', skip_reason: 'Appointment record not found' })
-          .eq('id', job.id);
-        continue;
-      }
-
-      // Version Check
-      if (job.appointment_version !== (appt.version || 1)) {
-        await supabase
-          .from('appointment_sms_jobs')
-          .update({ status: 'canceled', skip_reason: 'Outdated appointment version' })
-          .eq('id', job.id);
-        continue;
-      }
-
-      // Check Pause Setting
-      if (appt.sms_reminders_enabled === false) {
-        await supabase
-          .from('appointment_sms_jobs')
-          .update({ status: 'skipped', skip_reason: 'SMS reminders paused on appointment' })
-          .eq('id', job.id);
-        continue;
-      }
-
-      // Check Appointment Status Eligibility
-      const apptStatus = (appt.status || '').toLowerCase();
-      if (['checked_in', 'completed', 'arrived', 'cancelled'].includes(apptStatus) && job.job_type !== 'missed_appointment') {
-        await supabase
-          .from('appointment_sms_jobs')
-          .update({ status: 'canceled', skip_reason: `Appointment status is '${appt.status}'` })
-          .eq('id', job.id);
-        continue;
-      }
-
-      if (job.job_type === 'missed_appointment' && apptStatus !== 'no_show') {
-        await supabase
-          .from('appointment_sms_jobs')
-          .update({ status: 'skipped', skip_reason: 'Appointment is not marked no-show' })
-          .eq('id', job.id);
-        continue;
-      }
-
-      // Fetch Location Settings
-      const locationName = appt.location || 'Beaumont';
-      const settings = await getAppointmentSmsSettings(locationName);
-
-      // Check Customer Consent & Phone
-      let phoneToUse = appt.phone;
-      if (job.customer_id) {
-        const { data: cust } = await supabase
-          .from('customers')
-          .select('*')
-          .eq('id', job.customer_id)
-          .maybeSingle();
-        if (cust?.transactional_sms_consent === false && cust?.revoked_reason === 'Customer replied STOP') {
-          await supabase
-            .from('appointment_sms_jobs')
-            .update({ status: 'skipped', skip_reason: 'Customer opted out of all SMS via STOP' })
-            .eq('id', job.id);
-          continue;
-        }
-        if (cust?.phone) phoneToUse = cust.phone;
-      }
-
-      const digitsOnly = (phoneToUse || '').replace(/\D/g, '');
-      if (digitsOnly.length < 10) {
-        await supabase
-          .from('appointment_sms_jobs')
-          .update({ status: 'failed', error_message: 'Invalid 10-digit phone number' })
-          .eq('id', job.id);
-        continue;
-      }
-
-      // Render Template
-      let template = '';
-      if (job.job_type === 'immediate_confirmation') {
-        template = settings?.template_immediate_confirmation || 'Your appointment with Elite Phone Repair is set for {{appointment_date}} at {{appointment_time}}.\nDevice: {{device}}\nRepair: {{repair_issue}}\nLocation: {{location_address}}\n\nReply YES to confirm your appointment, or reply NO to cancel.';
-      } else if (job.job_type === 'reminder_24h') {
-        template = settings?.template_reminder_24h || 'Reminder: You’re scheduled with Elite Phone Repair tomorrow at {{appointment_time}}.';
-      } else if (job.job_type === 'reminder_2h') {
-        template = settings?.template_reminder_2h || 'Your appointment with Elite Phone Repair is coming up today at {{appointment_time}}.';
-      } else if (job.job_type === 'missed_appointment') {
-        template = settings?.template_missed_appointment || 'Hey, it’s Elite Phone Repair. We missed you for your appointment today. Reply here if you need to reschedule.';
-      }
-
-      const locationAddress = appt.location_address || 'our shop';
-      const renderedMessage = renderAppointmentTemplate(template, appt, locationAddress);
-
-      // Check Dry Run Mode (Only true if explicitly set to true in settings)
-      const isDryRun = settings ? settings.dry_run === true : false;
-
-      if (isDryRun) {
-        await supabase
-          .from('appointment_sms_jobs')
-          .update({
-            status: 'sent',
-            sent_at: new Date().toISOString(),
-            provider_message_id: `dry_run_${Date.now()}`,
-            error_message: '[DRY RUN MODE] Simulated send logged without calling Twilio.'
-          })
-          .eq('id', job.id);
-
-        processedCount++;
-        continue;
-      }
-
-      // LIVE SENDING VIA DEPLOYED 'send-sms' EDGE FUNCTION (TWILIO)
-      const res = await sendSmsViaEdgeFunction({
-        customer_id: job.customer_id || '',
-        to_phone: phoneToUse,
-        message_type: 'transactional',
-        content: renderedMessage,
-        ticket_id: null
-      } as any);
-
-      if (res.success && res.data) {
-        const twilioSid = res.data.message_id || res.data.sid || `tw_${Date.now()}`;
-        await supabase
-          .from('appointment_sms_jobs')
-          .update({
-            status: 'sent',
-            sent_at: new Date().toISOString(),
-            provider_message_id: twilioSid
-          })
-          .eq('id', job.id);
-        processedCount++;
-      } else {
-        await supabase
-          .from('appointment_sms_jobs')
-          .update({
-            status: 'failed',
-            error_message: res.reason || res.error || 'Failed to dispatch via Twilio'
-          })
-          .eq('id', job.id);
-        errorsList.push(res);
-      }
-    }
-
-    return { success: true, processed: processedCount, errors: errorsList };
-
-  } catch (err) {
-    console.error("Error in triggerAppointmentSmsProcessor:", err);
-    return { success: false, processed: 0, errors: [err] };
+    const { data, error } = await supabase.functions.invoke('process-appointment-sms', { body: {} });
+    if (error || !data?.ok) return { success:false, processed:0, errors:[error?.message || data?.error || 'Processor unavailable'] };
+    return { success:true, processed:data.processed || 0, errors:(data.results || []).filter((r: any) => ['failed','uncertain'].includes(r.outcome)) };
+  } catch {
+    return { success:false, processed:0, errors:['Could not contact appointment processor'] };
   }
 }
 

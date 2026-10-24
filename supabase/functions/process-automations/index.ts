@@ -1,3 +1,4 @@
+import { dispatchSms } from '../_shared/smsDispatch.ts';
 import { authorize } from '../_shared/authorization.ts';
 /**
  * process-automations — Supabase Edge Function
@@ -12,7 +13,7 @@ import { authorize } from '../_shared/authorization.ts';
  * - Checks opt-out (revoked_at) before any SMS send
  * - Loops are bounded: max 20 nodes per execution run per enrollment
  * - Draft and paused automations are completely ignored
- * - All sends go through the existing 'send-sms' edge function
+ * - All sends use the shared durable dispatch and consent gate
  */
 
 import { serve, createClient } from "../_shared/runtime.ts"
@@ -23,7 +24,6 @@ const corsHeaders = {
 }
 
 const MAX_NODES_PER_RUN = 20   // Loop protection: max steps per enrollment per tick
-const LOCK_TIMEOUT_MINUTES = 10 // Release stale locks older than this
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -37,74 +37,21 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     const supabaseClient = createClient(supabaseUrl, supabaseServiceKey)
-    const supabaseFunctionUrl = supabaseUrl + '/functions/v1/send-sms'
-    const workerKey = supabaseServiceKey
-
-    const nowIso = new Date().toISOString()
-
-    // ── 1. Release stale processing locks ──────────────────────────────────
-    const lockCutoff = new Date(Date.now() - LOCK_TIMEOUT_MINUTES * 60 * 1000).toISOString()
-    await supabaseClient
-      .from('automation_enrollments')
-      .update({ processing_locked_at: null })
-      .not('processing_locked_at', 'is', null)
-      .lt('processing_locked_at', lockCutoff)
-
-    // ── 2. Claim enrollments that are due ──────────────────────────────────
-    // Only pick active enrollments for active automations, not currently locked
-    const { data: dueEnrollments, error: fetchErr } = await supabaseClient
-      .from('automation_enrollments')
-      .select(`
-        *,
-        automation:automations!automation_id(id, name, status, trigger_type),
-        contact:customers!contact_id(id, name, phone, marketing_sms_consent, transactional_sms_consent, revoked_at)
-      `)
-      .eq('status', 'active')
-      .is('processing_locked_at', null)
-      .lte('next_execution_at', nowIso)
-      .limit(50) // process at most 50 enrollments per tick
-
-    if (fetchErr) {
-      throw new Error('Failed to fetch due enrollments: ' + fetchErr.message)
-    }
-
-    if (!dueEnrollments || dueEnrollments.length === 0) {
-      return new Response(
-        JSON.stringify({ ok: true, message: 'No due enrollments.', processed: 0 }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Filter to enrollments where the parent automation is actually active
-    const validEnrollments = dueEnrollments.filter(
-      (e: any) => e.automation?.status === 'active'
-    )
-
-    if (validEnrollments.length === 0) {
-      return new Response(
-        JSON.stringify({ ok: true, message: 'No active automations to process.', processed: 0 }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Lock them all at once
-    const enrollmentIds = validEnrollments.map((e: any) => e.id)
-    await supabaseClient
-      .from('automation_enrollments')
-      .update({ processing_locked_at: nowIso })
-      .in('id', enrollmentIds)
+    // Interrupted claims require review, not automatic replay of graph side effects.
+    const { data: validEnrollments, error: claimError } = await supabaseClient.rpc('crm_claim_automation_enrollments', { p_limit:10 })
+    if (claimError) throw new Error('Could not claim due automations')
 
     const results: any[] = []
 
     // ── 3. Process each enrollment ─────────────────────────────────────────
-    for (const enrollment of validEnrollments) {
+    for (const enrollment of validEnrollments || []) {
       const contact = enrollment.contact
-      const result = await processEnrollment(enrollment, contact, supabaseClient, supabaseFunctionUrl, workerKey)
+      const result = await processEnrollment(enrollment, contact, supabaseClient)
       results.push(result)
     }
 
     return new Response(
-      JSON.stringify({ ok: true, processed: validEnrollments.length, results }),
+      JSON.stringify({ ok: true, processed: results.length, results }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
@@ -122,9 +69,7 @@ serve(async (req) => {
 async function processEnrollment(
   enrollment: any,
   contact: any,
-  db: any,
-  sendSmsUrl: string,
-  workerKey: string
+  db: any
 ): Promise<any> {
   const enrollmentId = enrollment.id
   const automationId = enrollment.automation_id
@@ -139,7 +84,7 @@ async function processEnrollment(
     }
 
     // 2. Contact must not have opted out
-    if (contact.revoked_at) {
+    if (contact.revoked_at && contact.revoked_reason !== 'User opted out via UI') {
       await completeEnrollment(db, enrollmentId, 'Contact opted out — automation ended gracefully')
       await logAction(db, { enrollmentId, automationId, contactId: contact.id, nodeId: null, nodeType: null, action: 'opted_out', result: { revoked_at: contact.revoked_at } })
       return { enrollmentId, status: 'completed_opt_out' }
@@ -204,12 +149,13 @@ async function processEnrollment(
             const message = interpolateMessage(cfg.message || '', contact)
 
             // Call the existing send-sms edge function
-            const sendResult = await callSendSms(sendSmsUrl, workerKey, {
+            const sendResult = await dispatchSms(db, {
               customer_id: contact.id,
               message_type: 'marketing',
               content: message,
               ticket_id: null,
               automation_id: automationId,
+              idempotency_key: `automation:${enrollmentId}:${node.id}`,
             })
 
             await logAction(db, {
@@ -217,8 +163,12 @@ async function processEnrollment(
               nodeId: node.id, nodeType: 'send_sms',
               action: sendResult.ok ? 'sms_sent' : 'sms_failed',
               result: sendResult,
-              errorMessage: sendResult.ok ? undefined : (sendResult.reason || sendResult.error)
+              errorMessage: sendResult.ok ? undefined : sendResult.reason
             })
+            if (['uncertain','conflict'].includes(sendResult.status)) {
+              await failEnrollment(db,enrollmentId,'SMS outcome requires review before retrying')
+              return { enrollmentId,status:'failed',reason:sendResult.reason }
+            }
           }
         }
 
@@ -455,31 +405,4 @@ function interpolateMessage(template: string, contact: any): string {
     .replace(/\{\{name\}\}/gi, contact.name || '')
     .replace(/\{\{phone\}\}/gi, contact.phone || '')
     .replace(/\{name\}/g, contact.name || '')   // legacy format support
-}
-
-async function callSendSms(
-  supabaseFunctionUrl: string,
-  workerKey: string,
-  payload: {
-    customer_id: string
-    message_type: string
-    content: string
-    ticket_id: string | null
-    automation_id: string
-  }
-): Promise<Record<string, any>> {
-  try {
-    const res = await fetch(supabaseFunctionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${workerKey}`,
-        'apikey': workerKey,
-      },
-      body: JSON.stringify(payload),
-    })
-    return await res.json()
-  } catch (err: any) {
-    return { ok: false, error: err.message }
-  }
 }

@@ -1,3 +1,4 @@
+import { canSendSms } from '../supabase/functions/_shared/smsPolicy';
 
 import { Customer, RepairTicket } from '../types';
 import { supabase } from '../supabaseClient';
@@ -19,21 +20,8 @@ export const evaluateSmsRouting = (
   content: string,
   activeTickets: RepairTicket[] = []
 ): MessageRoutingResult => {
-  console.log("SMS ROUTING INPUT", {
-    messageType,
-    customerId: customer?.id,
-    transactional: customer?.transactional_sms_consent,
-    marketing: customer?.marketing_sms_consent,
-    activeTicketsCount: activeTickets?.length,
-  });
-
-  const hasActiveTicket = activeTickets.length > 0;
-  
-  // Rule 1: Transactional Logic (Granted unless customer explicitly revoked consent)
-  const canSendTransactional = customer?.transactional_sms_consent !== false || hasActiveTicket;
-  
-  // Rule 2: Marketing Logic (Strict Consent Only)
-  const canSendMarketing = !!customer?.marketing_sms_consent;
+  const canSendTransactional = canSendSms(customer, 'transactional');
+  const canSendMarketing = canSendSms(customer, 'marketing');
 
   if (messageType === 'transactional') {
     if (canSendTransactional) {
@@ -55,36 +43,12 @@ export const evaluateSmsRouting = (
     };
   }
 
+  // A combined body contains marketing. Never send that body under a transactional label,
+  // or split the same full body into two duplicate messages.
   if (messageType === 'combined') {
-    const splitMessages: { type: 'transactional' | 'marketing'; content: string }[] = [];
-    
-    // Evaluate Transactional Component
-    if (canSendTransactional) {
-      splitMessages.push({ 
-        type: 'transactional', 
-        content: '[SYSTEM: Transactional Component] ' + content 
-      });
-    }
-    
-    // Evaluate Marketing Component
-    if (canSendMarketing) {
-      splitMessages.push({ 
-        type: 'marketing', 
-        content: '[SYSTEM: Marketing Component] ' + content 
-      });
-    }
-
-    if (splitMessages.length === 0) {
-      return { 
-        shouldSend: false, 
-        reason: 'Consent denied for both transactional and marketing components. No messages will be sent.' 
-      };
-    }
-
-    return { 
-      shouldSend: true, 
-      splitMessages 
-    };
+    return canSendMarketing
+      ? { shouldSend:true, splitMessages:[{ type:'marketing', content }] }
+      : { shouldSend:false, reason:'Marketing consent is required for a message containing promotions.' };
   }
 
   return { shouldSend: false, reason: 'Unknown message type.' };
@@ -94,34 +58,38 @@ export const evaluateSmsRouting = (
  * Invokes the Supabase Edge Function 'send-sms' (Twilio version)
  */
 export const sendSmsViaEdgeFunction = async (payload: {
-  customer_id: string;
+  customer_id?: string;
+  to_phone?: string;
+  idempotency_key?: string;
   message_type: 'transactional' | 'marketing';
   content: string;
-  ticket_id: string | null;
+  ticket_id?: string | null;
   campaign_id?: string;
 }) => {
-  console.log("INVOKING EDGE FUNCTION 'send-sms'", payload);
-  
+  // Keep the same key if the browser loses the response. A user retry must not
+  // silently submit a second provider request after an ambiguous first attempt.
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(payload)));
+  const cacheKey = 'crm.sms.pending.' + Array.from(new Uint8Array(digest), x => x.toString(16).padStart(2,'0')).join('');
+  let key = payload.idempotency_key || crypto.randomUUID();
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
+    if (!payload.idempotency_key && saved && saved.expires > Date.now()) key = saved.key;
+    sessionStorage.setItem(cacheKey, JSON.stringify({ key, expires:Date.now() + 86400000 }));
+  } catch { /* Storage may be unavailable; this request still carries its send key. */ }
   try {
     const { data, error } = await supabase.functions.invoke('send-sms', {
-      body: payload
+      body:{ ...payload, idempotency_key:key }
     });
-
-    if (error) {
-      console.error("EDGE FUNCTION FAILED:", error);
-      return { success: false, error: error.message || error };
+    if (error || !data) return { success:false, status:'uncertain', error:'Could not confirm send outcome. Check message history before retrying.' };
+    if (['sent','failed','skipped'].includes(data.status)) {
+      try { sessionStorage.removeItem(cacheKey); } catch { /* Storage may be unavailable. */ }
     }
-
-    if (data && (data.ok === false || data.status === 'failed' || data.status === 'skipped')) {
-      console.warn("SMS SENDING SKIPPED OR FAILED:", data.reason || data.error);
-      return { success: false, status: data.status, reason: data.reason || data.error, data };
+    if (data.ok !== true || data.status !== 'sent') {
+      return { success:false, status:data.status, reason:data.reason || data.error, data };
     }
-
-    console.log("EDGE FUNCTION SUCCEEDED:", data);
-    return { success: true, data };
-  } catch (err: any) {
-    console.error("EDGE FUNCTION EXCEPTION:", err);
-    return { success: false, error: err?.message || err };
+    return { success:true, data };
+  } catch {
+    return { success:false, status:'uncertain', error:'Could not confirm send outcome. Check message history before retrying.' };
   }
 };
 
@@ -157,7 +125,7 @@ export const sendSmsIfAllowed = async (
       });
       results.push(res);
     }
-    return { success: true, results };
+    return { success: results.every(result => result.success), results };
   }
 
   // Handle single message (transactional or marketing)
