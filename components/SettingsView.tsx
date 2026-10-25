@@ -625,16 +625,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, currentLocation, 
           </div>
           <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Kiosk Exit PIN</label>
-              <input
-                name="kioskPassword"
-                type="text"
-                value={form.kioskPassword}
-                onChange={handleChange}
-                className={`${inputClasses} font-mono text-xl`}
-                placeholder="1271"
-              />
-              <p className="text-xs text-slate-500 mt-1">PIN required to exit Customer Check-In Kiosk mode.</p>
+              <p className="block text-sm font-bold text-slate-700 mb-2">iPad check-in PIN</p>
+              <p className="text-sm text-slate-600">Set the return PIN on each iPad using Customer check-in from the staff dashboard.</p>
+              <p className="text-xs text-slate-500 mt-2">To choose a new PIN, remove that iPad’s pairing, sign in with your staff password, and set it up again.</p>
             </div>
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">Analytics Password</label>
