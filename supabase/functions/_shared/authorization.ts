@@ -1,3 +1,4 @@
+import { tokenSessionId } from './kioskSecurity.ts';
 import { createClient } from './runtime.ts';
 
 type Options = { admin?: boolean; worker?: boolean; workerOnly?: boolean; headers?: Record<string, string> };
@@ -23,15 +24,31 @@ export async function authorize(req: Request, options: Options = {}): Promise<Re
     const url = Deno.env.get('SUPABASE_URL');
     if (!url || !serviceKey) return deny(503, 'Service unavailable');
     const client = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { data: { user }, error } = await client.auth.getUser(token);
-    if (error || !user) return deny(401, 'Authentication required');
-    const { data: member, error: memberError } = await client.from('staff_members')
-      .select('role').eq('user_id', user.id).eq('active', true).maybeSingle();
-    if (memberError || !member || !['staff', 'admin'].includes(member.role) || (options.admin && member.role !== 'admin')) {
-      return deny(403, 'Staff access required');
-    }
+    const {data:{user},error:userError}=await client.auth.getUser(token);
+    if(userError || !user)return deny(401,'Authentication required');
+    const sessionId=tokenSessionId(token);
+    if(!sessionId)return deny(403,'Staff access required');
+    const {data:role,error:roleError}=await client.rpc('crm_authorize_staff_session',{p_user:user.id,p_session:sessionId});
+    if(roleError)throw roleError;
+    const identity=['admin','staff'].includes(role)?{role}:null;
+    if (!identity || (options.admin && identity.role !== 'admin')) return deny(403,'Staff access required');
     return null;
   } catch {
     return deny(503, 'Service unavailable');
   }
+}
+
+// Decode a session ID only after Auth verifies the access token. The database
+// denies permanently suspended handoff sessions and revoked/expired PIN devices.
+export async function verifiedStaffIdentity(req:Request,client:any) {
+  const token=(req.headers.get('Authorization') || '').replace(/^Bearer /,'');
+  if(!token)return null;
+  const {data:{user},error}=await client.auth.getUser(token);
+  if(error || !user)return null;
+  const sessionId=tokenSessionId(token);
+  if(!sessionId)return null;
+  const {data:role,error:accessError}=await client.rpc('crm_authorize_staff_session',{p_user:user.id,p_session:sessionId});
+  if(accessError)throw new Error('Access check unavailable');
+  if(!['admin','staff'].includes(role))return null;
+  return {user,role,sessionId};
 }

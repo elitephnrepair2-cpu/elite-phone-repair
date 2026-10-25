@@ -9,8 +9,7 @@ const TicketView = lazy(() => import('./components/TicketView'));
 const KanbanBoard = lazy(() => import('./components/KanbanBoard'));
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
-const KioskView = lazy(() => import('./components/KioskView'));
-const KioskLogin = lazy(() => import('./components/KioskLogin'));
+const KioskSetupDialog = lazy(() => import('./components/KioskSetupDialog'));
 const AppointmentList = lazy(() => import('./components/AppointmentList'));
 const SettingsView = lazy(() => import('./components/SettingsView'));
 const CustomersTableView = lazy(() => import('./components/CustomersTableView'));
@@ -28,7 +27,7 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import { REPAIR_PRICES } from './constants/prices';
 import { sendSmsIfAllowed } from './services/smsService';
 import { scheduleAppointmentSmsSequence, cancelAppointmentSmsJobs, scheduleMissedAppointmentSms } from './services/appointmentSmsService';
-import { StaffUser, signOutStaff } from './services/authService';
+import { StaffUser } from './services/authService';
 import { useWorkspaceData } from './hooks/useWorkspaceData';
 import { ScreenBoundary } from './components/ScreenBoundary';
 
@@ -43,6 +42,7 @@ const DEFAULT_SETTINGS: ShopSettings = {
 };
 
 const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }> = ({ activeStaff, onSignOut }) => {
+  const [kioskSetup,setKioskSetup]=useState(false);
   const [activeQuote, setActiveQuote] = useState<Quote | null>(null);
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -332,126 +332,6 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
     }
   };
 
-  const handleKioskCheckIn = async (data: any) => {
-    try {
-      let customerId: string | undefined;
-      const normalizedPhone = data.phone.replace(/\D/g, ""); // Strip non-numeric for robust matching
-
-      // Find by phone (handling duplicates safely bypassing 1000 row limit using ilike)
-      const likePattern = `%${normalizedPhone.split('').join('%')}%`;
-      const { data: existing } = await supabase
-        .from('customers')
-        .select('id, phone')
-        .eq('location', currentLocation)
-        .ilike('phone', likePattern)
-        .then(res => {
-          if (res.data) {
-            // Find one where the digits match exactly from candidates
-            const match = res.data.find(c => c.phone && c.phone.replace(/\D/g, "") === normalizedPhone);
-            return { data: match || null };
-          }
-          return res;
-        });
-
-      if (existing) {
-        // 'existing' could be an array if maybeSingle didn't limit it to 1 initially, but our promise strictly returns a single object
-        customerId = (existing as any).id;
-        const now = new Date().toISOString();
-        const updatePayload: any = {
-          name: data.name,
-          email: data.email || null,
-          alt_phone: data.callBackNumber || null,
-          marketing_sms_consent: data.promotionalConsent,
-          transactional_sms_consent: data.transactionalConsent,
-          consent_source: 'iPad',
-          consent_method: 'checkbox',
-          consent_ip: data.consent_ip,
-          consent_form_version: data.consent_form_version
-        };
-
-        if (data.promotionalConsent) {
-          updatePayload.marketing_sms_consent_at = now;
-        }
-        if (data.transactionalConsent) {
-          updatePayload.transactional_sms_consent_at = now;
-        }
-
-        try {
-          await supabase.from('customers').update(updatePayload).eq('id', customerId);
-        } catch (updateError) {
-          console.error("Non-fatal Customer update error (proceeding to ticket creation):", updateError);
-        }
-      } else {
-        const now = new Date().toISOString();
-        const insertData: any = {
-          name: data.name,
-          phone: data.phone, // Store original format inputted
-          email: data.email || null,
-          alt_phone: data.callBackNumber || null,
-          location: currentLocation,
-          marketing_sms_consent: data.promotionalConsent,
-          transactional_sms_consent: data.transactionalConsent,
-          consent_source: 'iPad',
-          consent_method: 'checkbox',
-          consent_ip: data.consent_ip,
-          consent_form_version: data.consent_form_version
-        };
-
-        if (data.promotionalConsent) {
-          insertData.marketing_sms_consent_at = now;
-        }
-        if (data.transactionalConsent) {
-          insertData.transactional_sms_consent_at = now;
-        }
-
-        let { data: created, error } = await supabase.from('customers').insert([insertData]).select().single();
-
-        if (error && (error.code === '23505' || error.message?.includes('idx_customers_phone_location'))) {
-          const { data: allCust } = await supabase.from('customers').select('*').eq('location', currentLocation);
-          const matched = allCust?.find(c => c.phone && c.phone.replace(/\D/g, '') === normalizedPhone);
-          if (matched) {
-            await supabase.from('customers').update(insertData).eq('id', matched.id);
-            customerId = matched.id;
-            error = null;
-          }
-        } else if (created) {
-          customerId = created.id;
-        }
-
-        if (error || !customerId) {
-          console.error("Customer creation error:", error);
-          return false;
-        }
-      }
-
-      // Calculate automated price quote
-      const estimatedCost = (data.deviceBrand && data.deviceModel && data.repairCategory)
-        ? REPAIR_PRICES[data.deviceBrand]?.[data.deviceModel]?.[data.repairCategory] || null
-        : null;
-
-      const { data: ticket, error: ticketError } = await supabase.from('tickets').insert([{
-        customer_id: customerId,
-        device: data.device,
-        problem_description: data.problemDescription,
-        heard_from: data.heardFrom,
-        location: currentLocation,
-        repair_type: data.repairCategory || null,
-        estimated_cost: estimatedCost
-      }]).select().single();
-
-      if (ticketError || !ticket) {
-        console.error("Ticket creation error:", ticketError);
-        return false;
-      }
-
-      fetchData(['customers','tickets']);
-      return true;
-    } catch (e) {
-      console.error("Kiosk check-in exception:", e);
-      return false;
-    }
-  };
-
   const handleTestEdgeSms = async () => {
     if (!selectedCustomer) {
       alert("Please select a customer first.");
@@ -615,19 +495,6 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
     }
 
     // Kiosk views and public widgets are accessible without staff login
-    if (view === 'kiosk') {
-      return <KioskView
-        onCheckIn={handleKioskCheckIn}
-        onExitKiosk={() => setView('dashboard')}
-        kioskPassword={settings.kioskPassword}
-      />;
-    }
-    if (view === 'kiosk_login') {
-      return <KioskLogin
-        onLogin={() => setView('kiosk')}
-        correctPassword={settings.kioskPassword}
-      />;
-    }
     if (view === 'quote_widget') {
       return <InstantQuoteWidget isInternal={activeStaff !== null} />;
     }
@@ -672,6 +539,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
             }}
             onUpdateTicketStatus={handleUpdateTicketStatus}
             onMarkAsPaid={handleMarkAsPaid}
+            onOpenCheckIn={() => setKioskSetup(true)}
             onOpenSMSInbox={() => setView('campaigns')}
             onOpenKanban={() => setView('kanban')}
             onOpenTodayList={() => setView('dashboard_list')}
@@ -923,10 +791,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
         <Header
           currentView={view}
           onLogoClick={() => setView('dashboard')}
-          onGoToKiosk={async () => {
-            try { await signOutStaff(); }
-            finally { window.location.assign(`/?view=kiosk&location=${encodeURIComponent(currentLocation)}`); }
-          }}
+          onGoToKiosk={() => setKioskSetup(true)}
           onGoToCustomers={() => setView('customers_dashboard')}
           onGoToAppointments={() => setView('appointments_dashboard')}
           onGoToParts={() => setView('parts_dashboard')}
@@ -954,6 +819,8 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
         <ScreenBoundary key={view}><Suspense fallback={<p role="status" className="p-6 text-slate-500">Opening screen…</p>}>{renderContent()}</Suspense></ScreenBoundary>
       </main>
       {view !== 'kiosk' && view !== 'kiosk_login' && view !== 'quote_widget' && <Footer businessName={settings.businessName} />}
+
+      {kioskSetup && <Suspense fallback={<p role="status">Opening check-in setup…</p>}><KioskSetupDialog location={currentLocation} onClose={()=>setKioskSetup(false)}/></Suspense>}
 
       {/* Analytics Password Modal */}
       {showAnalyticsAuthModal && (

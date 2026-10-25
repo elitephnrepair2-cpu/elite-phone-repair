@@ -14,6 +14,7 @@ interface FrontDeskPortalProps {
   onViewTicket: (ticket: FullRepairTicket) => void;
   onUpdateTicketStatus: (ticketId: string, status: string) => void;
   onMarkAsPaid: (ticketId: string, isPaid: boolean) => void;
+  onOpenCheckIn?: () => void;
   onOpenSMSInbox: () => void;
   onOpenKanban: () => void;
   onOpenTodayList: () => void;
@@ -34,6 +35,7 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
   onViewTicket,
   onUpdateTicketStatus,
   onMarkAsPaid,
+  onOpenCheckIn,
   onOpenSMSInbox,
   onOpenKanban,
   onOpenTodayList,
@@ -169,6 +171,7 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
 
   return (
     <div className="space-y-6">
+      {onOpenCheckIn && <button onClick={onOpenCheckIn} className="w-full sm:w-auto bg-red-600 text-white font-bold rounded-xl px-5 py-3 shadow-sm">Customer check-in</button>}
       {/* Front Desk Header & Stats Bar */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-red-950 rounded-3xl p-6 text-white shadow-xl border border-slate-700/60 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-red-600/10 rounded-full blur-3xl pointer-events-none"></div>

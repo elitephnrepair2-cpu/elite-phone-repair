@@ -1,3 +1,4 @@
+vi.mock('../services/kioskDeviceService',()=>({isKioskLocked:()=>Boolean(localStorage.getItem('elite_kiosk_handoff_v1')),KIOSK_LOCK_EVENT:'elite-kiosk-handoff'}));
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -125,4 +126,11 @@ it('a new session token cannot reuse the previous token’s membership check',as
   expect(screen.queryByText('Private workspace')).toBeNull();
   await waitFor(()=>expect(mocks.getVerifiedStaff).toHaveBeenCalledTimes(2));
   await act(async()=>resolve(null));await screen.findByText('Staff access required');
+});
+
+it('handoff mode overrides Back/direct staff URLs and never mounts private queries',async()=>{
+ localStorage.setItem('elite_kiosk_handoff_v1','Houston');window.history.replaceState(null,'','/?view=settings');
+ mocks.getSession.mockResolvedValue({data:{session:{access_token:'old-staff-token'}}});
+ render(<App/>);await screen.findByText('Public check-in');
+ expect(mocks.getSession).not.toHaveBeenCalled();expect(mocks.workspace).not.toHaveBeenCalled();
 });

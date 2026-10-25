@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import { getVerifiedStaff, signOutStaff, type StaffUser } from './services/authService';
 import { StaffLoginView } from './components/StaffLoginView';
+import {isKioskLocked,KIOSK_LOCK_EVENT} from './services/kioskDeviceService';
 
 const StaffWorkspace = lazy(() => import('./StaffWorkspace'));
 const PublicKiosk = lazy(() => import('./components/PublicKiosk'));
@@ -68,8 +69,14 @@ export function StaffAccess() {
 }
 
 export default function App() {
+  const [locked,setLocked]=useState(isKioskLocked);
+  useEffect(()=>{
+    const check=()=>setLocked(isKioskLocked());
+    window.addEventListener('storage',check);window.addEventListener('pageshow',check);window.addEventListener(KIOSK_LOCK_EVENT,check);
+    return ()=>{window.removeEventListener('storage',check);window.removeEventListener('pageshow',check);window.removeEventListener(KIOSK_LOCK_EVENT,check);};
+  },[]);
   const view = new URLSearchParams(window.location.search).get('view');
-  if (view === 'kiosk') return <Suspense fallback={<Loading />}><PublicKiosk /></Suspense>;
+  if (locked || view === 'kiosk') return <Suspense fallback={<Loading />}><PublicKiosk /></Suspense>;
   if (view === 'quote_widget') return <Suspense fallback={<Loading />}><InstantQuoteWidget /></Suspense>;
   return <StaffAccess />;
 }
