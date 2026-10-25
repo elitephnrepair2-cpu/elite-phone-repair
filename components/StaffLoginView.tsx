@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { signInWithEmail } from '../services/authService';
 import { isTrustedDevice } from '../services/sessionStorage';
 
-export function StaffLoginView({ businessName }: { businessName: string }) {
+export function StaffLoginView({ businessName,onSignedIn }: { businessName: string;onSignedIn?:()=>Promise<void> }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -17,6 +17,7 @@ export function StaffLoginView({ businessName }: { businessName: string }) {
     try {
       const result = await signInWithEmail(email, password, trustedDevice);
       if (!result.success) setError(result.error || 'Unable to sign in. Please try again.');
+      else if(onSignedIn) await onSignedIn();
     } catch {
       setError('Unable to connect. Please try again.');
     } finally {

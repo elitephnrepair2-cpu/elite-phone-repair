@@ -1,3 +1,5 @@
+import PairedKiosk from './PairedKiosk';
+import {getKioskPair,isKioskLocked,lockedKioskLocation} from '../services/kioskDeviceService';
 import React, { useEffect, useRef, useState } from 'react';
 import KioskView from './KioskView';
 import { createClient } from '@supabase/supabase-js';
@@ -15,7 +17,7 @@ const publicClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
 });
 
-export default function PublicKiosk() {
+function UnpairedKiosk() {
   const container = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | null>(null);
   const requestId = useRef(crypto.randomUUID());
@@ -88,4 +90,12 @@ export default function PublicKiosk() {
         }
       }} />
   </main>;
+}
+
+export default function PublicKiosk(){
+ const requested=new URLSearchParams(window.location.search).get('location');
+ const location=lockedKioskLocation() || ((requested || localStorage.getItem('elite_location'))==='Houston'?'Houston':'Beaumont');
+ if(isKioskLocked())return <PairedKiosk location={location}/>;
+ if(getKioskPair(location))return <main className="min-h-screen bg-slate-900 text-white grid place-items-center p-6"><div><p>Start customer check-in from your staff dashboard to lock staff access first.</p><a className="block mt-4 underline" href="/">Open staff dashboard</a></div></main>;
+ return <UnpairedKiosk/>;
 }
