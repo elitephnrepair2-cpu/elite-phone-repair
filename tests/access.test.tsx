@@ -5,11 +5,12 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(), onAuthStateChange: vi.fn(), getVerifiedStaff: vi.fn(), signOutStaff: vi.fn(),
-  signInWithEmail: vi.fn(), workspace: vi.fn(), authChanged: null as any,
+  signInWithEmail: vi.fn(), workspace: vi.fn(), mounted:vi.fn(), unmounted:vi.fn(), authChanged: null as any,
 }));
 vi.mock('../supabaseClient', () => ({ supabase: { auth: mocks } }));
 vi.mock('../services/authService', () => mocks);
 vi.mock('../StaffWorkspace', () => ({ default: (props: any) => {
+  React.useEffect(()=>{ mocks.mounted(); return ()=>mocks.unmounted(); },[]);
   mocks.workspace(props); return <div>Private workspace<button onClick={props.onSignOut}>Lock workstation</button></div>;
 } }));
 vi.mock('../components/PublicKiosk', () => ({ default: () => <div>Public check-in</div> }));
@@ -96,4 +97,32 @@ describe('workstation access', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     await waitFor(() => expect(mocks.signInWithEmail).toHaveBeenCalledWith('staff@example.test','password',trusted));
   });
+});
+
+it('keeps the same workstation mounted during a focus access check',async()=>{
+  mocks.getSession.mockResolvedValue({data:{session:{access_token:'token'}}});
+  render(<StaffAccess/>); await screen.findByText('Private workspace');
+  let resolve:any; mocks.getVerifiedStaff.mockReturnValueOnce(new Promise(r=>{resolve=r;}));
+  act(()=>window.dispatchEvent(new Event('focus')));
+  await waitFor(()=>expect(mocks.getVerifiedStaff).toHaveBeenCalledTimes(2));
+  expect(screen.getByText('Private workspace')).toBeTruthy();
+  expect(mocks.mounted).toHaveBeenCalledTimes(1);expect(mocks.unmounted).not.toHaveBeenCalled();
+  await act(async()=>resolve(member));
+  expect(mocks.mounted).toHaveBeenCalledTimes(1);
+});
+it('still removes workstation access when a background check finds revoked membership',async()=>{
+  mocks.getSession.mockResolvedValue({data:{session:{access_token:'token'}}});
+  render(<StaffAccess/>); await screen.findByText('Private workspace');
+  mocks.getVerifiedStaff.mockResolvedValueOnce(null);
+  act(()=>window.dispatchEvent(new Event('focus')));
+  await screen.findByText('Staff access required');expect(screen.queryByText('Private workspace')).toBeNull();
+});
+it('a new session token cannot reuse the previous token’s membership check',async()=>{
+  mocks.getSession.mockResolvedValue({data:{session:{access_token:'first-token'}}});
+  render(<StaffAccess/>); await screen.findByText('Private workspace');
+  let resolve:any; mocks.getVerifiedStaff.mockReturnValueOnce(new Promise(r=>{resolve=r;}));
+  act(()=>mocks.authChanged('SIGNED_IN',{access_token:'different-token'}));
+  expect(screen.queryByText('Private workspace')).toBeNull();
+  await waitFor(()=>expect(mocks.getVerifiedStaff).toHaveBeenCalledTimes(2));
+  await act(async()=>resolve(null));await screen.findByText('Staff access required');
 });

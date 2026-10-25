@@ -2,7 +2,6 @@
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import type { Customer, ImportedRow } from '../types';
 
-declare var XLSX: any;
 
 interface CustomerListProps {
   customers: Customer[];
