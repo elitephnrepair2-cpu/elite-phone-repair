@@ -1,34 +1,36 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import type { Customer, RepairTicket, View, FullRepairTicket, Quote, Appointment, ShopSettings, PartsOrder } from './types';
 import { supabase } from './supabaseClient';
-import CustomerList from './components/CustomerList';
-import CustomerForm from './components/CustomerForm';
-import TicketForm from './components/TicketForm';
-import TicketView from './components/TicketView';
-import KanbanBoard from './components/KanbanBoard';
+const CustomerList = lazy(() => import('./components/CustomerList'));
+const CustomerForm = lazy(() => import('./components/CustomerForm'));
+const TicketForm = lazy(() => import('./components/TicketForm'));
+const TicketView = lazy(() => import('./components/TicketView'));
+const KanbanBoard = lazy(() => import('./components/KanbanBoard'));
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
-import KioskView from './components/KioskView';
-import KioskLogin from './components/KioskLogin';
-import AppointmentList from './components/AppointmentList';
-import SettingsView from './components/SettingsView';
-import CustomersTableView from './components/CustomersTableView';
-import TodayTicketsList from './components/TodayTicketsList';
-import PartsDashboard from './components/PartsDashboard';
-import InstantQuoteWidget from './components/InstantQuoteWidget';
-import CampaignsView from './components/CampaignsView';
+const KioskView = lazy(() => import('./components/KioskView'));
+const KioskLogin = lazy(() => import('./components/KioskLogin'));
+const AppointmentList = lazy(() => import('./components/AppointmentList'));
+const SettingsView = lazy(() => import('./components/SettingsView'));
+const CustomersTableView = lazy(() => import('./components/CustomersTableView'));
+const TodayTicketsList = lazy(() => import('./components/TodayTicketsList'));
+const PartsDashboard = lazy(() => import('./components/PartsDashboard'));
+const InstantQuoteWidget = lazy(() => import('./components/InstantQuoteWidget'));
+const CampaignsView = lazy(() => import('./components/CampaignsView'));
 import { FrontDeskPortal } from './components/FrontDeskPortal';
-import { AnalyticsView } from './components/AnalyticsView';
-import { SMSInboxView } from './components/SMSInboxView';
-import { FacebookMessengerInboxView } from './components/FacebookMessengerInboxView';
-import QuoteList from './components/QuoteList';
-import QuoteForm from './components/QuoteForm';
+const AnalyticsView = lazy(() => import('./components/AnalyticsView').then(module => ({default:module.AnalyticsView})));
+const SMSInboxView = lazy(() => import('./components/SMSInboxView').then(module => ({default:module.SMSInboxView})));
+const FacebookMessengerInboxView = lazy(() => import('./components/FacebookMessengerInboxView').then(module => ({default:module.FacebookMessengerInboxView})));
+const QuoteList = lazy(() => import('./components/QuoteList'));
+const QuoteForm = lazy(() => import('./components/QuoteForm'));
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { REPAIR_PRICES } from './constants/prices';
 import { sendSmsIfAllowed } from './services/smsService';
-import { scheduleAppointmentSmsSequence, cancelAppointmentSmsJobs, scheduleMissedAppointmentSms, processInboundAppointmentReply } from './services/appointmentSmsService';
+import { scheduleAppointmentSmsSequence, cancelAppointmentSmsJobs, scheduleMissedAppointmentSms } from './services/appointmentSmsService';
 import { StaffUser, signOutStaff } from './services/authService';
+import { useWorkspaceData } from './hooks/useWorkspaceData';
+import { ScreenBoundary } from './components/ScreenBoundary';
 
 const DEFAULT_SETTINGS: ShopSettings = {
   businessName: 'Elite Phone Repair',
@@ -41,11 +43,6 @@ const DEFAULT_SETTINGS: ShopSettings = {
 };
 
 const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }> = ({ activeStaff, onSignOut }) => {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [tickets, setTickets] = useState<RepairTicket[]>([]);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [partsOrders, setPartsOrders] = useState<PartsOrder[]>([]);
-  const [quotes, setQuotes] = useState<Quote[]>([]);
   const [activeQuote, setActiveQuote] = useState<Quote | null>(null);
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -85,6 +82,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
     onConfirm?: () => void;
   } | null>(null);
   const [currentLocation, setCurrentLocation] = useLocalStorage<string>('elite_location', 'Beaumont');
+  const { customers,tickets,appointments,parts_orders:partsOrders,quotes,refreshData:fetchData,loading:dataLoading,error:dataError } = useWorkspaceData(currentLocation,onSignOut);
   const [settings, setSettings] = useLocalStorage<ShopSettings>('elite_shop_settings', DEFAULT_SETTINGS);
 
   const [isDarkMode, setIsDarkMode] = useLocalStorage<boolean>('elite_dark_mode', false);
@@ -131,156 +129,6 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
       setAnalyticsAuthError(true);
     }
   };
-
-  const fetchData = useCallback(async () => {
-    try {
-      const handleQueryError = async (source: string, error: any) => {
-        console.error(`${source} query error:`, error);
-        if (error?.message && (
-          error.message.toLowerCase().includes('jwt') ||
-          error.message.toLowerCase().includes('token') ||
-          error.message.toLowerCase().includes('expired') ||
-          error.message.toLowerCase().includes('invalid signature') ||
-          error.message.toLowerCase().includes('unauthorized')
-        )) {
-          console.warn("Staff session is no longer valid. Locking workstation.");
-          try {
-            await supabase.auth.signOut();
-          } catch (e) {
-            console.error("signOut error:", e);
-          }
-          // Remove potential localStorage items to clean cache
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (key.startsWith('sb-') || key.includes('supabase'))) {
-              localStorage.removeItem(key);
-            }
-          }
-          window.location.reload();
-        }
-      };
-
-      const fetchCustomers = async () => {
-        let all: Customer[] = [];
-        let p = 0;
-        let more = true;
-        while (more) {
-          const { data, error } = await supabase
-            .from('customers')
-            .select('*')
-            .eq('location', currentLocation)
-            .order('created_at', { ascending: false })
-            .range(p * 1000, (p + 1) * 1000 - 1);
-          if (error) {
-            await handleQueryError("fetchCustomers", error);
-            break;
-          }
-          if (!data) break;
-          all = [...all, ...data];
-          if (data.length < 1000) more = false;
-          p++;
-        }
-        return all;
-      };
-
-      const fetchTickets = async () => {
-        let all: RepairTicket[] = [];
-        let p = 0;
-        let more = true;
-        while (more) {
-          const { data, error } = await supabase
-            .from('tickets')
-            .select('*, customer:customers(*)')
-            .eq('location', currentLocation)
-            .order('created_at', { ascending: false })
-            .range(p * 1000, (p + 1) * 1000 - 1);
-          if (error) {
-            await handleQueryError("fetchTickets", error);
-            break;
-          }
-          if (!data) break;
-          all = [...all, ...data as any];
-          if (data.length < 1000) more = false;
-          p++;
-        }
-        return all;
-      };
-
-      const fetchAppointments = async () => {
-        const { data, error } = await supabase
-          .from('appointments')
-          .select('*')
-          .eq('location', currentLocation)
-          .order('date', { ascending: true });
-        if (error) {
-          await handleQueryError("fetchAppointments", error);
-        }
-        return data || [];
-      };
-
-      const fetchParts = async () => {
-        const { data, error } = await supabase
-          .from('parts_orders')
-          .select('*')
-          .eq('location', currentLocation)
-          .order('created_at', { ascending: false });
-        if (error) {
-          await handleQueryError("fetchParts", error);
-        }
-        return data || [];
-      };
-
-      const fetchQuotes = async () => {
-        const { data, error } = await supabase
-          .from('quotes')
-          .select('*')
-          .eq('location', currentLocation)
-          .order('created_at', { ascending: false });
-        if (error) {
-          await handleQueryError("fetchQuotes", error);
-        }
-        return data || [];
-      };
-
-      const [custs, tix, appts, parts, qts] = await Promise.all([
-        fetchCustomers(),
-        fetchTickets(),
-        fetchAppointments(),
-        fetchParts(),
-        fetchQuotes()
-      ]);
-
-      setCustomers(custs);
-      setTickets(tix as any);
-      setAppointments(appts);
-      setPartsOrders(parts);
-      setQuotes(qts);
-    } catch (e) {
-      console.error("Data fetch error:", e);
-    }
-  }, [currentLocation]);
-
-  useEffect(() => {
-    fetchData();
-    const channel = supabase
-      .channel('db-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'parts_orders' }, () => fetchData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sms_messages' }, async (payload: any) => {
-        if (payload?.new && payload.new.direction === 'inbound' && payload.new.from_phone && payload.new.content) {
-          await processInboundAppointmentReply(payload.new.from_phone, payload.new.content);
-        }
-        fetchData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'quotes' }, () => fetchData())
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchData]);
 
   const handleSaveCustomer = async (customerData: Partial<Omit<Customer, 'id' | 'created_at'>>) => {
     const now = new Date().toISOString();
@@ -343,7 +191,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
       alert("Error saving customer: " + result.error.message);
       return null;
     } else {
-      fetchData();
+      fetchData(['customers']);
       setView('dashboard');
       setCustomerToEdit(null);
       return result.data;
@@ -360,7 +208,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
       } else {
         showAlert("Customer deleted successfully.");
         if (selectedCustomerId === id) setSelectedCustomerId(null);
-        fetchData();
+        fetchData(['customers','tickets']);
       }
     });
   };
@@ -376,7 +224,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
           setActiveTicket(null);
           setView('dashboard');
         }
-        fetchData();
+        fetchData(['tickets']);
       }
     });
   };
@@ -394,7 +242,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
     if (error) {
       alert(error.message);
     } else if (data) {
-      fetchData();
+      fetchData(['tickets']);
       setActiveTicket(data as any);
       setView('view_ticket');
     }
@@ -416,7 +264,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
     if (error) {
       alert(error.message);
     } else if (data) {
-      fetchData();
+      fetchData(['tickets']);
       setActiveTicket(data as any);
       setView('view_ticket');
     }
@@ -438,7 +286,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
     if (error) {
       alert(error.message);
     } else if (ticket) {
-      fetchData();
+      fetchData(['tickets']);
       if (activeTicket?.id === ticketId) {
         setActiveTicket(ticket as any);
       }
@@ -454,7 +302,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
     if (error) {
       alert(error.message);
     } else {
-      fetchData();
+      fetchData(['tickets']);
     }
   };
 
@@ -469,7 +317,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
     if (error) {
       showAlert("Error updating status: " + error.message);
     } else if (updatedTicket) {
-      fetchData();
+      fetchData(['tickets']);
       if (activeTicket?.id === ticket.id) {
         setActiveTicket(updatedTicket as any);
       }
@@ -596,7 +444,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
         return false;
       }
 
-      fetchData();
+      fetchData(['customers','tickets']);
       return true;
     } catch (e) {
       console.error("Kiosk check-in exception:", e);
@@ -699,7 +547,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
       await scheduleAppointmentSmsSequence(insertedAppt, customerId, false);
     }
 
-    await fetchData();
+    await fetchData(['appointments','customers']);
   };
 
   const handleUpdateAppointmentStatus = async (id: string, newStatus: string) => {
@@ -720,7 +568,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
         await scheduleMissedAppointmentSms(targetAppt);
       }
     }
-    fetchData();
+    fetchData(['appointments']);
   };
 
   const handleUpdateAppointment = async (updatedAppt: Appointment) => {
@@ -737,7 +585,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
     if (updatedAppt.sms_reminders_enabled !== false) {
       await scheduleAppointmentSmsSequence(updatedAppt, null, true);
     }
-    fetchData();
+    fetchData(['appointments']);
   };
 
   const handleToggleSmsReminders = async (appointmentId: string, enabled: boolean) => {
@@ -755,10 +603,17 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
         await scheduleAppointmentSmsSequence(updated, null, false);
       }
     }
-    fetchData();
+    fetchData(['appointments']);
   };
 
   const renderContent = () => {
+    // Ticket screens need their linked contact before exposing edit/send actions.
+    // The normalized ticket fetch can finish before the customer directory does.
+    if (['dashboard','kanban','dashboard_list','view_ticket','edit_ticket','analytics','campaigns','messages'].includes(view)
+      && tickets.some(ticket => !ticket.customer)) {
+      return <p role="status" className="p-6 text-slate-500">Loading linked customer records…</p>;
+    }
+
     // Kiosk views and public widgets are accessible without staff login
     if (view === 'kiosk') {
       return <KioskView
@@ -955,7 +810,7 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
           onDeleteAppointment={async (id) => {
             await cancelAppointmentSmsJobs(id, 'Appointment deleted');
             await supabase.from('appointments').delete().eq('id', id);
-            fetchData();
+            fetchData(['appointments']);
           }}
           onToggleSmsReminders={handleToggleSmsReminders}
           onCreateAppointment={handleCreateAppointment}
@@ -967,17 +822,17 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
             const payload = { ...part, location: currentLocation };
             const { error } = await supabase.from('parts_orders').insert([payload]);
             if (error) alert("Error saving part: " + error.message);
-            fetchData();
+            fetchData(['parts_orders']);
           }}
           onUpdatePartStatus={async (id, newStatus) => {
             const { error } = await supabase.from('parts_orders').update({ status: newStatus }).eq('id', id);
             if (error) alert("Error updating status: " + error.message);
-            fetchData();
+            fetchData(['parts_orders']);
           }}
           onDeletePart={async (id) => {
             const { error } = await supabase.from('parts_orders').delete().eq('id', id);
             if (error) alert("Error deleting part: " + error.message);
-            fetchData();
+            fetchData(['parts_orders']);
           }}
         />;
       case 'quotes_dashboard':
@@ -994,14 +849,14 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
           onDelete={async (id) => {
             const { error } = await supabase.from('quotes').delete().eq('id', id);
             if (error) alert("Error deleting quote: " + error.message);
-            fetchData();
+            fetchData(['quotes']);
           }}
         />;
       case 'new_quote':
       case 'edit_quote':
         return <QuoteForm
           onSaved={() => {
-            fetchData();
+            fetchData(['quotes']);
             setView('quotes_dashboard');
           }}
           onCancel={() => setView('quotes_dashboard')}
@@ -1092,7 +947,11 @@ const StaffWorkspace: React.FC<{ activeStaff: StaffUser; onSignOut: () => void }
         />
       )}
       <main className={`flex-grow w-full max-w-full overflow-x-hidden ${(view === 'kiosk' || view === 'kiosk_login') ? 'flex items-center justify-center bg-slate-900 min-h-screen' : view === 'quote_widget' ? 'min-h-screen bg-[#f4f2ee]' : 'container mx-auto px-4 py-8'}`}>
-        {renderContent()}
+        {dataError && <div role="alert" className="mb-4 rounded-xl bg-amber-50 border border-amber-200 p-3 text-amber-900 flex items-center justify-between gap-3">
+          <span>{dataError}</span><button className="font-bold underline" onClick={() => void fetchData()}>Retry</button>
+        </div>}
+        {dataLoading && <p role="status" className="mb-3 text-sm text-slate-500">Loading shop records…</p>}
+        <ScreenBoundary key={view}><Suspense fallback={<p role="status" className="p-6 text-slate-500">Opening screen…</p>}>{renderContent()}</Suspense></ScreenBoundary>
       </main>
       {view !== 'kiosk' && view !== 'kiosk_login' && view !== 'quote_widget' && <Footer businessName={settings.businessName} />}
 

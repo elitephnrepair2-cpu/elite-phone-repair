@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useDeferredValue } from 'react';
 import type { Customer } from '../types';
 
 interface CustomersTableViewProps {
@@ -10,9 +10,12 @@ interface CustomersTableViewProps {
 
 const CustomersTableView: React.FC<CustomersTableViewProps> = ({ customers, onSelectCustomer, onAddNew, onDeleteCustomer }) => {
     const [searchTerm, setSearchTerm] = useState('');
+    const query = useDeferredValue(searchTerm);
+    const [page,setPage] = useState(1);
+    const pageSize = 50;
 
     const filteredCustomers = useMemo(() => {
-        const raw = searchTerm.trim().toLowerCase();
+        const raw = query.trim().toLowerCase();
         const sDigits = raw.replace(/\D/g, "");
 
         return customers.filter(customer => {
@@ -20,9 +23,13 @@ const CustomersTableView: React.FC<CustomersTableViewProps> = ({ customers, onSe
             const phoneDigits = (customer.phone ?? "").replace(/\D/g, "");
             const email = (customer.email ?? "").toLowerCase();
 
-            return name.includes(raw) || phoneDigits.includes(sDigits) || email.includes(raw);
+            return name.includes(raw) || (sDigits.length > 0 && phoneDigits.includes(sDigits)) || email.includes(raw);
         });
-    }, [customers, searchTerm]);
+    }, [customers, query]);
+    const pages=Math.max(1,Math.ceil(filteredCustomers.length / pageSize));
+    const currentPage=Math.min(page,pages);
+    const offset=(currentPage-1) * pageSize;
+    const visibleCustomers=filteredCustomers.slice(offset,offset+pageSize);
 
     return (
         <div className="bg-white p-6 md:p-8 rounded-2xl shadow-lg animate-in fade-in slide-in-from-bottom-4">
@@ -37,7 +44,7 @@ const CustomersTableView: React.FC<CustomersTableViewProps> = ({ customers, onSe
                             type="search"
                             placeholder="Search by name, phone, or email..."
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
                             className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 outline-none"
                         />
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -67,7 +74,7 @@ const CustomersTableView: React.FC<CustomersTableViewProps> = ({ customers, onSe
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {filteredCustomers.length > 0 ? (
-                            filteredCustomers.map(customer => (
+                            visibleCustomers.map(customer => (
                                 <tr
                                     key={customer.id}
                                     onClick={() => onSelectCustomer(customer.id)}
@@ -128,6 +135,14 @@ const CustomersTableView: React.FC<CustomersTableViewProps> = ({ customers, onSe
                     </tbody>
                 </table>
             </div>
+            <nav aria-label="Customer pages" className="mt-4 flex items-center justify-between gap-3 text-sm text-slate-600">
+                <span>{filteredCustomers.length ? `${offset+1}–${Math.min(offset+pageSize,filteredCustomers.length)} of ${filteredCustomers.length}` : '0 records'}</span>
+                <div className="flex items-center gap-3">
+                    <button disabled={currentPage===1} onClick={()=>setPage(currentPage-1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">Previous</button>
+                    <span>Page {currentPage} of {pages}</span>
+                    <button disabled={currentPage===pages} onClick={()=>setPage(currentPage+1)} className="rounded-lg border px-3 py-2 disabled:opacity-40">Next</button>
+                </div>
+            </nav>
         </div>
     );
 };

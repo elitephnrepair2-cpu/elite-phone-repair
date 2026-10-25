@@ -86,6 +86,16 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
     return tickets.filter(t => (t.status || 'In Queue') !== 'Completed' && (t.status || '') !== 'Delivered').length;
   }, [tickets]);
 
+  const activeTicketsByCustomer = useMemo(() => {
+    const grouped = new Map<string, RepairTicket[]>();
+    for (const ticket of tickets) {
+      if ((ticket.status || 'In Queue') === 'Completed') continue;
+      const group = grouped.get(ticket.customer_id) || [];
+      group.push(ticket); grouped.set(ticket.customer_id,group);
+    }
+    return grouped;
+  },[tickets]);
+
   // Filtered customer list for search and directory
   const filteredCustomers = useMemo(() => {
     let list = customers;
@@ -335,7 +345,7 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
               <>
                 {visibleCustomers.map(customer => {
                   const isSelected = selectedCustomerId === customer.id;
-                  const custActiveTickets = tickets.filter(t => t.customer_id === customer.id && (t.status || 'In Queue') !== 'Completed');
+                  const custActiveTickets = activeTicketsByCustomer.get(customer.id) || [];
 
                   return (
                     <button

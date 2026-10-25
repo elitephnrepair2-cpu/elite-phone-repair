@@ -36,8 +36,9 @@ export function StaffAccess() {
 
   useEffect(() => {
     let cancelled = false;
-    setStaff(null);
-    setCheckedToken(null);
+    // Revalidate membership in the background on focus. Clearing the existing
+    // member here remounts the entire CRM and reloads all records on every return.
+    // A new token is still hidden by the checkedToken render guard below.
     if (!token) return;
     // Outside the auth event callback to avoid auth-client lock reentrancy.
     getVerifiedStaff().then(member => {
