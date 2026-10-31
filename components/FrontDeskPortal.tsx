@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useDeferredValue } from 'react';
+import React, { useState, useMemo, useDeferredValue, useEffect } from 'react';
+import { businessDate, intakeCustomerIds } from '../services/intakeDate';
 import type { Customer, RepairTicket, FullRepairTicket } from '../types';
 import { formatPhoneInput, isValidPhoneNumber } from '../services/phoneValidator';
 
@@ -63,11 +64,20 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
     return tickets.filter(t => t.customer_id === selectedCustomer.id);
   }, [tickets, selectedCustomer]);
 
-  // Today's tickets count
-  const todayTickets = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    return tickets.filter(t => t.created_at && t.created_at.startsWith(todayStr));
-  }, [tickets]);
+  const [today, setToday] = useState(() => businessDate());
+  useEffect(() => {
+    const updateDate = () => setToday(businessDate());
+    const timer = window.setInterval(updateDate, 60_000);
+    window.addEventListener('focus', updateDate);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', updateDate);
+    };
+  }, []);
+  const todayIntakeIds = useMemo(
+    () => intakeCustomerIds(customers, tickets, today),
+    [customers, tickets, today],
+  );
 
   // Active tickets in shop count
   const activeTicketsCount = useMemo(() => {
@@ -102,8 +112,7 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
     }
 
     if (filterMode === 'today') {
-      const todayStr = new Date().toISOString().split('T')[0];
-      list = list.filter(c => c.created_at && c.created_at.startsWith(todayStr));
+      list = list.filter(c => todayIntakeIds.has(c.id));
     } else if (filterMode === 'active_tickets') {
       const customerIdsWithActiveTickets = new Set(
         tickets.filter(t => (t.status || 'In Queue') !== 'Completed').map(t => t.customer_id)
@@ -112,7 +121,7 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
     }
 
     return list;
-  }, [customers, tickets, deferredQuery, filterMode]);
+  }, [customers, tickets, deferredQuery, filterMode, todayIntakeIds]);
 
   const visibleCustomers = useMemo(() => {
     return filteredCustomers.slice(0, displayLimit);
@@ -180,9 +189,9 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
 
           {/* Quick Action Metrics */}
           <div className="flex items-center gap-3">
-            <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/10 text-center">
+            <div title="Customers added or ticketed today (Central Time), counted once per customer" className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/10 text-center">
               <span className="text-[10px] text-slate-300 uppercase font-bold tracking-wider block">Today's Intake</span>
-              <span className="text-xl font-black text-white">{todayTickets.length}</span>
+              <span className="text-xl font-black text-white">{todayIntakeIds.size}</span>
             </div>
             <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/10 text-center">
               <span className="text-[10px] text-slate-300 uppercase font-bold tracking-wider block">Active Queue</span>
