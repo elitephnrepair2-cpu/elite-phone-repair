@@ -85,40 +85,6 @@ export const Header: React.FC<HeaderProps> = ({
 
                     {/* Right: Location Switcher & Dark Mode */}
                     <div className="flex items-center gap-3">
-                        {/* Direct Campaigns & SMS Messaging Button */}
-                        <button
-                            onClick={onGoToCampaigns}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-extrabold shadow-sm transition-all flex items-center gap-1.5 border ${
-                                currentView === 'campaigns' || currentView === 'messages'
-                                    ? 'bg-amber-600 text-white border-amber-600'
-                                    : 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100'
-                            }`}
-                            title="Campaigns & SMS Messaging"
-                        >
-                            <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-                            </svg>
-                            <span className="hidden sm:inline">Campaigns & SMS</span>
-                        </button>
-
-                        {/* Facebook Messenger Button */}
-                        {onGoToMessenger && (
-                            <button
-                                onClick={onGoToMessenger}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold shadow-sm transition-all flex items-center gap-1.5 border ${
-                                    currentView === 'messenger'
-                                        ? 'bg-blue-600 text-white border-blue-600'
-                                        : 'bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-100'
-                                }`}
-                                title="Facebook Messenger CRM Inbox"
-                            >
-                                <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 2C6.477 2 2 6.145 2 11.258c0 2.91 1.455 5.51 3.733 7.188-.195.973-.772 2.617-.893 3.013-.083.272.183.518.441.389 1.135-.568 2.67-1.393 3.712-1.922.955.26 1.97.4 3.007.4 5.523 0 10-4.145 10-9.258C22 6.145 17.523 2 12 2zm1.293 12.707l-2.793-2.978-5.45 2.978 5.992-6.36 2.825 2.978 5.418-2.978-5.992 6.36z" />
-                                </svg>
-                                <span className="hidden sm:inline">Messenger Inbox</span>
-                            </button>
-                        )}
-
                         {/* Dark Mode Toggle */}
                         <button
                             onClick={onToggleDarkMode}
@@ -168,15 +134,7 @@ export const Header: React.FC<HeaderProps> = ({
                                         ● {activeStaff.role}
                                     </span>
                                 </div>
-                                {onSignOut && (
-                                    <button
-                                        onClick={onSignOut}
-                                        className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-950 dark:hover:text-rose-400 transition-colors text-xs font-bold"
-                                        title="Sign Out Staff Workstation"
-                                    >
-                                        🔒 Lock
-                                    </button>
-                                )}
+
                             </div>
                         )}
                     </div>
@@ -402,6 +360,15 @@ export const Header: React.FC<HeaderProps> = ({
                                 </svg>
                                 <span>Instant Quote Page</span>
                             </button>
+
+                            {onSignOut && (
+                                <button
+                                    onClick={onSignOut}
+                                    className="w-full px-4 py-3 text-left font-bold rounded-xl text-slate-200 hover:bg-slate-800 hover:text-white"
+                                >
+                                    Sign out
+                                </button>
+                            )}
 
                             <div className="pt-4 border-t border-slate-800 mt-2">
                                 <button
