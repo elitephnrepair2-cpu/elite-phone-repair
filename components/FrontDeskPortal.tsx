@@ -43,7 +43,8 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const deferredQuery = useDeferredValue(searchQuery);
-  const [filterMode, setFilterMode] = useState<'all' | 'today' | 'active_tickets'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'date' | 'active_tickets'>('all');
+  const [directoryDate, setDirectoryDate] = useState(() => businessDate());
   const [displayLimit, setDisplayLimit] = useState(35);
   const [showQuickAddModal, setShowQuickAddModal] = useState(false);
   // Quick Customer Intake Form State
@@ -79,6 +80,10 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
     () => intakeCustomerIds(customers, tickets, today),
     [customers, tickets, today],
   );
+  const directoryIntakeIds = useMemo(
+    () => intakeCustomerIds(customers, tickets, directoryDate),
+    [customers, tickets, directoryDate],
+  );
 
   // Active tickets in shop count
   const activeTicketsCount = useMemo(() => {
@@ -112,8 +117,8 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
       });
     }
 
-    if (filterMode === 'today') {
-      list = list.filter(c => todayIntakeIds.has(c.id));
+    if (filterMode === 'date') {
+      list = list.filter(c => directoryIntakeIds.has(c.id));
     } else if (filterMode === 'active_tickets') {
       const customerIdsWithActiveTickets = new Set(
         tickets.filter(t => (t.status || 'In Queue') !== 'Completed').map(t => t.customer_id)
@@ -122,7 +127,7 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
     }
 
     return list;
-  }, [customers, tickets, deferredQuery, filterMode, todayIntakeIds]);
+  }, [customers, tickets, deferredQuery, filterMode, directoryIntakeIds]);
 
   const visibleCustomers = useMemo(() => {
     return filteredCustomers.slice(0, displayLimit);
@@ -274,11 +279,35 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
             </div>
           </div>
 
+          <div className="flex flex-wrap items-center gap-2 py-3 border-b border-slate-200 dark:border-slate-700">
+            <label htmlFor="directory-date" className="text-xs font-bold text-slate-600 dark:text-slate-300">📅 Came in on</label>
+            <input
+              id="directory-date"
+              type="date"
+              value={filterMode === 'date' ? directoryDate : ''}
+              onChange={(event) => {
+                if (event.target.value) {
+                  setDirectoryDate(event.target.value);
+                  setFilterMode('date');
+                } else {
+                  setFilterMode('all');
+                }
+                setDisplayLimit(35);
+              }}
+              className="min-w-0 px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-red-500"
+            />
+            <button
+              onClick={() => { setDirectoryDate(today); setFilterMode('date'); setDisplayLimit(35); }}
+              className="text-xs font-bold text-red-600 dark:text-red-400 px-2 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-slate-700"
+            >Today</button>
+            {filterMode === 'date' && <p className="w-full text-xs text-slate-500 dark:text-slate-400">Customers added or checked in on this day · Central Time. Select All to clear.</p>}
+          </div>
+
           {/* Customer Scroll List */}
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700/60 mt-2 pr-1">
             {filteredCustomers.length === 0 ? (
               <div className="p-8 text-center space-y-3">
-                <p className="text-slate-400 dark:text-slate-500 font-medium text-sm">No customers matched your search.</p>
+                <p className="text-slate-400 dark:text-slate-500 font-medium text-sm">{filterMode === 'date' ? 'No customers matched this date and search.' : 'No customers matched your search.'}</p>
                 <button
                   onClick={() => {
                     setNewCustName(searchQuery);
