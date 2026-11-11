@@ -36,6 +36,7 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
   onUpdateTicketStatus,
   onMarkAsPaid,
   onOpenCheckIn,
+  onOpenTodayList,
   onEditCustomer,
   onDeleteCustomer,
   onDeleteTicket
@@ -188,7 +189,7 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
           </div>
 
           {/* Quick Action Metrics */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <div title="Customers added or ticketed today (Central Time), counted once per customer" className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/10 text-center">
               <span className="text-[10px] text-slate-300 uppercase font-bold tracking-wider block">Today's Intake</span>
               <span className="text-xl font-black text-white">{todayIntakeIds.size}</span>
@@ -197,8 +198,12 @@ export const FrontDeskPortal: React.FC<FrontDeskPortalProps> = ({
               <span className="text-[10px] text-slate-300 uppercase font-bold tracking-wider block">Active Queue</span>
               <span className="text-xl font-black text-emerald-400">{activeTicketsCount}</span>
             </div>
-            
-
+            <button
+              onClick={onOpenTodayList}
+              className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-bold transition-colors border border-white/20"
+            >
+              📅 Repair History
+            </button>
           </div>
         </div>
 

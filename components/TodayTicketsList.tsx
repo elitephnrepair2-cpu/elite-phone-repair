@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import type { FullRepairTicket } from '../types';
+import { businessDate } from '../services/intakeDate';
 
 interface TodayTicketsListProps {
     tickets: FullRepairTicket[];
@@ -10,8 +11,8 @@ interface TodayTicketsListProps {
 }
 
 const TodayTicketsList: React.FC<TodayTicketsListProps> = ({ tickets, onTicketClick, onTogglePaid, onTicketStatusChange, onDeleteTicket }) => {
-    // Default to today's date in local YYYY-MM-DD format
-    const todayStr = useMemo(() => new Date().toLocaleDateString('en-CA'), []);
+    // Use the shop's Central Time date consistently for intake history.
+    const todayStr = businessDate();
     const [selectedDate, setSelectedDate] = useState<string>(todayStr);
 
     // Calculate next / previous date strings
@@ -28,8 +29,7 @@ const TodayTicketsList: React.FC<TodayTicketsListProps> = ({ tickets, onTicketCl
     const dateTickets = useMemo(() => {
         return tickets.filter(t => {
             if (!t.created_at) return false;
-            const ticketDateStr = new Date(t.created_at).toLocaleDateString('en-CA');
-            return t.created_at.startsWith(selectedDate) || ticketDateStr === selectedDate;
+            return businessDate(t.created_at) === selectedDate;
         });
     }, [tickets, selectedDate]);
 
@@ -86,7 +86,7 @@ const TodayTicketsList: React.FC<TodayTicketsListProps> = ({ tickets, onTicketCl
                             {formattedDateHeader}
                         </h3>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                            Showing intake tickets checked in on this date
+                            Repair history · Checked in on this date (Central Time)
                         </p>
                     </div>
                 </div>
@@ -103,6 +103,7 @@ const TodayTicketsList: React.FC<TodayTicketsListProps> = ({ tickets, onTicketCl
 
                     <input
                         type="date"
+                        aria-label="Repair intake date"
                         value={selectedDate}
                         onChange={(e) => {
                             if (e.target.value) setSelectedDate(e.target.value);
